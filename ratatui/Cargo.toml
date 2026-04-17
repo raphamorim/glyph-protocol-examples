@@ -1,0 +1,10 @@
+[package]
+name = "ratatui-glyph-protocol-example"
+version = "0.1.0"
+edition = "2021"
+description = "Arrow-key demo of the Glyph Protocol (APC 1cc6D), rendered through ratatui."
+
+[dependencies]
+ratatui = "0.29"
+crossterm = "0.28"
+base64 = "0.22"

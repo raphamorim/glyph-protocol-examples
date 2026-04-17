@@ -1,0 +1,28 @@
+{
+	"name": "ink-glyph-protocol-example",
+	"version": "0.1.0",
+	"description": "Arrow-key demo of the Glyph Protocol (APC 1cc6D), rendered through Ink.",
+	"private": true,
+	"type": "module",
+	"bin": {
+		"ink-glyph-demo": "dist/cli.js"
+	},
+	"scripts": {
+		"build": "tsc",
+		"start": "node dist/cli.js",
+		"dev": "tsc --watch"
+	},
+	"dependencies": {
+		"ink": "^5.2.0",
+		"meow": "^13.2.0",
+		"react": "^18.3.1"
+	},
+	"devDependencies": {
+		"@types/node": "^22.9.0",
+		"@types/react": "^18.3.12",
+		"typescript": "^5.6.3"
+	},
+	"engines": {
+		"node": ">=20"
+	}
+}
