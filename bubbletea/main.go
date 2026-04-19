@@ -92,9 +92,23 @@ func registerNabla(out io.Writer) {
 	}
 }
 
+func registerNotoFruit(out io.Writer) {
+	for _, e := range notoFruitLetters {
+		sendRegisterColrv1(out, e.Cp, e.Payload)
+		flush(out)
+	}
+}
+
 func registerZupra(out io.Writer) {
 	for _, e := range zupraLetters {
 		sendRegisterColrv0(out, e.Cp, zupraUpm, e.Payload)
+		flush(out)
+	}
+}
+
+func registerTwemoji(out io.Writer) {
+	for _, e := range twemojiLetters {
+		sendRegisterColrv0(out, e.Cp, twemojiUpm, e.Payload)
 		flush(out)
 	}
 }
@@ -125,6 +139,36 @@ func zupraRenderedText() string {
 	for _, ch := range zupraText {
 		mapped := ch
 		for _, e := range zupraLetters {
+			if e.Letter == ch {
+				mapped = e.Cp
+				break
+			}
+		}
+		b.WriteRune(mapped)
+	}
+	return b.String()
+}
+
+func twemojiRenderedText() string {
+	var b strings.Builder
+	for _, ch := range twemojiText {
+		mapped := ch
+		for _, e := range twemojiLetters {
+			if e.Letter == ch {
+				mapped = e.Cp
+				break
+			}
+		}
+		b.WriteRune(mapped)
+	}
+	return b.String()
+}
+
+func notoFruitRenderedText() string {
+	var b strings.Builder
+	for _, ch := range notoFruitText {
+		mapped := ch
+		for _, e := range notoFruitLetters {
 			if e.Letter == ch {
 				mapped = e.Cp
 				break
@@ -251,9 +295,11 @@ func main() {
 	}
 	if hasColrv0 {
 		registerZupra(os.Stdout)
+		registerTwemoji(os.Stdout)
 	}
 	if hasColrv1 {
 		registerNabla(os.Stdout)
+		registerNotoFruit(os.Stdout)
 	}
 	flush(os.Stdout)
 
@@ -264,16 +310,25 @@ func main() {
 		colrv1Line = nablaRenderedText()
 	}
 	colrv0Line := "(colrv0 not advertised by terminal)"
+	colrv0Emoji := "(colrv0 not advertised by terminal)"
 	if hasColrv0 {
 		colrv0Line = zupraRenderedText()
+		colrv0Emoji = twemojiRenderedText()
 	}
 	glyfLine := "(glyf not advertised by terminal)"
 	if hasGlyf {
 		glyfLine = glyfIcons()
 	}
 
+	colrv1Emoji := "(colrv1 not advertised by terminal)"
+	if hasColrv1 {
+		colrv1Emoji = notoFruitRenderedText()
+	}
+
 	fmt.Printf("colrv1 example: \x1b[48;2;21;49;162m%s\x1b[0m\n", colrv1Line)
 	fmt.Printf("colrv1 example: %s\n", colrv1Line)
+	fmt.Printf("colrv1 example: %s\n", colrv1Emoji)
 	fmt.Printf("colrv0 example: %s\n", colrv0Line)
+	fmt.Printf("colrv0 example: %s\n", colrv0Emoji)
 	fmt.Printf("glyf examples:  %s\n", glyfLine)
 }

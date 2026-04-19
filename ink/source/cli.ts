@@ -11,6 +11,8 @@
 
 import {nablaLetters, nablaText} from './nabla_rio.js';
 import {zupraLetters, zupraText, zupraUpm} from './zupra_using.js';
+import {twemojiLetters, twemojiText, twemojiUpm} from './twemoji.js';
+import {notoFruitLetters, notoFruitText} from './noto_fruit.js';
 
 // glyf slots — five Nerd Font outlines at contiguous PUA-B codepoints.
 const slotCps: ReadonlyArray<number> = [
@@ -71,6 +73,18 @@ function registerNabla(): void {
 function registerZupra(): void {
 	for (const e of zupraLetters) {
 		sendRegisterColrv0(e.cp, zupraUpm, e.payload);
+	}
+}
+
+function registerTwemoji(): void {
+	for (const e of twemojiLetters) {
+		sendRegisterColrv0(e.cp, twemojiUpm, e.payload);
+	}
+}
+
+function registerNotoFruit(): void {
+	for (const e of notoFruitLetters) {
+		sendRegisterColrv1(e.cp, e.payload);
 	}
 }
 
@@ -165,19 +179,33 @@ const hasColrv0 = (fmtBits & FMT_COLRV0_BIT) !== 0;
 const hasColrv1 = (fmtBits & FMT_COLRV1_BIT) !== 0;
 
 if (hasGlyf) registerGlyfSlots();
-if (hasColrv0) registerZupra();
-if (hasColrv1) registerNabla();
+if (hasColrv0) {
+	registerZupra();
+	registerTwemoji();
+}
+if (hasColrv1) {
+	registerNabla();
+	registerNotoFruit();
+}
 
 const colrv1Line = hasColrv1
 	? remapText(nablaText, nablaLetters)
 	: '(colrv1 not advertised by terminal)';
+const colrv1Emoji = hasColrv1
+	? remapText(notoFruitText, notoFruitLetters)
+	: '(colrv1 not advertised by terminal)';
 const colrv0Line = hasColrv0
 	? remapText(zupraText, zupraLetters)
+	: '(colrv0 not advertised by terminal)';
+const colrv0Emoji = hasColrv0
+	? remapText(twemojiText, twemojiLetters)
 	: '(colrv0 not advertised by terminal)';
 const glyfLine = hasGlyf ? glyfIcons() : '(glyf not advertised by terminal)';
 
 process.stdout.write('\n');
 process.stdout.write(`colrv1 example: \x1b[48;2;21;49;162m${colrv1Line}\x1b[0m\n`);
 process.stdout.write(`colrv1 example: ${colrv1Line}\n`);
+process.stdout.write(`colrv1 example: ${colrv1Emoji}\n`);
 process.stdout.write(`colrv0 example: ${colrv0Line}\n`);
+process.stdout.write(`colrv0 example: ${colrv0Emoji}\n`);
 process.stdout.write(`glyf examples:  ${glyfLine}\n`);

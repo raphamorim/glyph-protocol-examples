@@ -9,6 +9,8 @@
 // registrations, prints the lines in cooked mode, and exits.
 
 mod colorv2;
+mod noto_fruit;
+mod twemoji;
 mod zupra_using;
 
 use std::io::{self, Write};
@@ -62,7 +64,7 @@ fn send_register_colrv1(
 ) -> io::Result<()> {
     write!(
         out,
-        "\x1b_25a1;r;cp={:x};fmt=colrv1;reply=2;upm=1000;{}\x1b\\",
+        "\x1b_25a1;r;cp={:x};fmt=colrv1;reply=0;upm=1000;{}\x1b\\",
         cp, payload
     )
 }
@@ -75,7 +77,7 @@ fn send_register_colrv0(
 ) -> io::Result<()> {
     write!(
         out,
-        "\x1b_25a1;r;cp={:x};fmt=colrv0;reply=2;upm={};{}\x1b\\",
+        "\x1b_25a1;r;cp={:x};fmt=colrv0;reply=0;upm={};{}\x1b\\",
         cp, upm, payload
     )
 }
@@ -102,9 +104,25 @@ fn register_nabla(out: &mut impl Write) -> io::Result<()> {
     Ok(())
 }
 
+fn register_noto_fruit(out: &mut impl Write) -> io::Result<()> {
+    for (_, cp, payload) in noto_fruit::NOTO_FRUIT_LETTERS.iter() {
+        send_register_colrv1(out, *cp, payload)?;
+        out.flush()?;
+    }
+    Ok(())
+}
+
 fn register_zupra(out: &mut impl Write) -> io::Result<()> {
     for (_, cp, payload) in zupra_using::ZUPRA_LETTERS.iter() {
         send_register_colrv0(out, *cp, zupra_using::UPM, payload)?;
+        out.flush()?;
+    }
+    Ok(())
+}
+
+fn register_twemoji(out: &mut impl Write) -> io::Result<()> {
+    for (_, cp, payload) in twemoji::TWEMOJI_LETTERS.iter() {
+        send_register_colrv0(out, *cp, twemoji::UPM, payload)?;
         out.flush()?;
     }
     Ok(())
@@ -128,6 +146,32 @@ fn zupra_text() -> String {
         .chars()
         .map(|ch| {
             zupra_using::ZUPRA_LETTERS
+                .iter()
+                .find(|(letter, _, _)| *letter == ch)
+                .map(|(_, cp, _)| char::from_u32(*cp).unwrap())
+                .unwrap_or(ch)
+        })
+        .collect()
+}
+
+fn twemoji_text() -> String {
+    twemoji::TEXT
+        .chars()
+        .map(|ch| {
+            twemoji::TWEMOJI_LETTERS
+                .iter()
+                .find(|(letter, _, _)| *letter == ch)
+                .map(|(_, cp, _)| char::from_u32(*cp).unwrap())
+                .unwrap_or(ch)
+        })
+        .collect()
+}
+
+fn noto_fruit_text() -> String {
+    noto_fruit::TEXT
+        .chars()
+        .map(|ch| {
+            noto_fruit::NOTO_FRUIT_LETTERS
                 .iter()
                 .find(|(letter, _, _)| *letter == ch)
                 .map(|(_, cp, _)| char::from_u32(*cp).unwrap())
@@ -263,9 +307,11 @@ fn main() -> io::Result<()> {
     }
     if has_colrv0 {
         register_zupra(&mut stdout)?;
+        register_twemoji(&mut stdout)?;
     }
     if has_colrv1 {
         register_nabla(&mut stdout)?;
+        register_noto_fruit(&mut stdout)?;
     }
     stdout.flush()?;
 
@@ -281,6 +327,16 @@ fn main() -> io::Result<()> {
     } else {
         String::from("(colrv0 not advertised by terminal)")
     };
+    let colrv0_emoji = if has_colrv0 {
+        twemoji_text()
+    } else {
+        String::from("(colrv0 not advertised by terminal)")
+    };
+    let colrv1_emoji = if has_colrv1 {
+        noto_fruit_text()
+    } else {
+        String::from("(colrv1 not advertised by terminal)")
+    };
     let glyf_line = if has_glyf {
         glyf_icons()
     } else {
@@ -289,7 +345,9 @@ fn main() -> io::Result<()> {
 
     println!("colrv1 example: \x1b[48;2;21;49;162m{}\x1b[0m", colrv1_line);
     println!("colrv1 example: {}", colrv1_line);
+    println!("colrv1 example: {}", colrv1_emoji);
     println!("colrv0 example: {}", colrv0_line);
+    println!("colrv0 example: {}", colrv0_emoji);
     println!("glyf examples:  {}", glyf_line);
 
     Ok(())
