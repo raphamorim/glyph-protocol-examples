@@ -3,7 +3,6 @@
 		"target": "ES2022",
 		"module": "NodeNext",
 		"moduleResolution": "NodeNext",
-		"jsx": "react",
 		"outDir": "dist",
 		"rootDir": "source",
 		"strict": true,

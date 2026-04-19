@@ -1,38 +1,37 @@
-// Glyph Protocol demo — registers five real Nerd Font outlines at
-// empty Supplementary PUA-B codepoints (U+100000..U+100004). The
-// `glyf` bytes come straight out of JetBrainsMono Nerd Font via
-// fontTools, so the icons look exactly like Nerd Fonts but the
-// codepoints they're mounted at are empty — you don't need Nerd
-// Fonts installed to see them.
+// Glyph Protocol demo — sample output exercising the protocol's three
+// payload formats:
 //
-// Keybindings:
-//   ↑ re-register all
-//   ↓ clear all registrations
-//   q / esc / ctrl+c  quit
+//	colrv1 : "Rio Terminal Emulator" rendered via Typearture's Nabla.
+//	colrv0 : "Using Glyph protocol" rendered via Zupra 3D eYe/FS.
+//	glyf   : five Nerd Font outlines (branch / folder / home / heart /
+//	         Rust cog) registered at consecutive PUA-B codepoints.
+//
+// The demo is deliberately non-TUI: it probes the protocol, sends the
+// registrations, prints the lines in cooked mode, and exits.
 
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
-	tea "github.com/charmbracelet/bubbletea/v2"
-	"github.com/charmbracelet/lipgloss/v2"
+	"github.com/charmbracelet/x/term"
+	"github.com/muesli/cancelreader"
 )
 
-// -------------------------------------------------------------------------
-// Slots + glyf payloads
-// -------------------------------------------------------------------------
-
+// glyf slots — five Nerd Font outlines at contiguous PUA-B codepoints.
 var slotCps = [5]rune{
 	0x100000, 0x100001, 0x100002, 0x100003, 0x100004,
 }
 
-var slotLabels = [5]string{"branch", "folder", "home", "heart", "rust"}
-
-// Base64 `glyf` bytes extracted from JetBrainsMono Nerd Font via
-// fontTools. units per em = 1000. Source Nerd Font codepoints:
+// `glyf` simple-glyph bytes, base64-encoded, extracted from
+// JetBrainsMono Nerd Font via fontTools. units per em = 1000.
+// Source codepoints in the Nerd Font (for reference):
 //
 //	branch  U+E0A0
 //	folder  U+F07B
@@ -47,236 +46,234 @@ var nerdGlyfsB64 = [5]string{
 	"AAoAAP/YAyEC+AENARcBWgFlAW8BfQGIAbsBxAHNAAAAMhYXFhYyNjc2MzIXFhcWFxY3NjMyFhcWFxY3NjMyFxcHBxcWNzYXFgcGFxYzMhcWBw4CFAcUFQcUFxYWFRQGFhcWFgcGFBcWFxYGBwYUFxYGBw4CFhYXFgcGBwYVFBcWBwYjIgYXFgYnJgcGFxcHBiInJgYHBiMiJyYHBgcGBiMiJyYiBwYiJyYmBwYGJyYmJyYHBiImJyYmBwYiJjc3JyYHBicmNzYmIwYmNzY2Nzc0JyYmNTQ3NiYnJiY3NjQnJiY0Njc2NjQnJicmJjY3NjYnJjc3Mjc2NScmJyYnJjYXMjY1NCYmJyc3NhcWNzcnJjYzMhcWNjc2NjMyFxY3Njc2NjMyFxYyNzY3FyIHBhYzMjYnJgczBwYHBhUUMzIXFhYHBgcOAhUGFQciFhcWFxYXFhcWFjc2NzY3NjMzNzYvAiYnJjU0NzcnJicmJicnBwYGJyYnBwYGFxYyNzYmJyYFIgcGFBcWNicmBRcWBwYPAgYXFzM1NRcVMzY3NjU0JyYjBxUzMhcWFQcjIhUGFjMyNzYyFxYXFhUWFhcWNzY/AjY2Fxc2NjQjIiYnJicmJyYnJiMGIgcGFjMyNiclIgcGFjc2JyYBjQQICgcECAgIEQMJBgUCAwUGEBMDBgQEAwUDFBIFAwQEAQEEBRIZBQUGBQMCFxUFBwwBAgICARgSChoEFBcEExEUDwQECBATERMEGAoGCAQEBhEHAxUZCAsGAxcYBAUGChoVAgMBAQQEBhQSCgMECgQRFAUEBgcGBAUQEAgLDQwOCwoODQgFBg4CBRUPDAQEBAgTFAYIAQEEBREaBAYGBQQYGQYKAQQCARgSCg0NBBQXBBMQERIEBg4KCAIDCg0ECBEUBA0QBwQFEBcBAQICAgsIGRgCAgIBBAMFGhIFBAEBCAMFEhMIBAQEBgUREQQGCAcEBgQQDwoLCQQFCQcMDBARCg0HPgEPQjEfoJ8NJzACAykCBAQCAQEEAgIDGAgEAwggCg0BAQMCDBABAgIBHRsDBw4PAx8xFkQTCRQSEAkHEvoMDgcHGAgEBAcFAjAHBA0OFBQTBf3wBAsIAh0cAQMKBFOENjcIERsLLzEkJAECAXl5ARgBBBQZEAYEBQYBRCEnKiYSBgYGECAcARg/NhQLDgkLBQkQBimQEAQPChESCA4BVRAGCigLChEFAvgEEQsIBgkREA8FCAIBDA0KERYCAgkIBAQWFwIDBQYFBBkVAwIDBhkDBAQEAQEBAQcEAwQHBSQICAgMEREICwoFBggKDAgQEQwJBAQCCAgHGAYDAwQIAxAXBwMGFBkKBgQCAxYWBAQJCAQVHAwOAwQQEwYREBMVFBMCEA0GAgQmAgQPDAoSFgQJCQgXFgICBAYEBhgVBgEMFgQKAwMGBAQEBgQTEQgJCQwQEAgLCwQMBAkHBAoDAwkLDAgGCAgSFwcEAwQHAgIGBQQXDAEEBQEGCgQTBAcGBAICFxYICAkEFhEKDA0BARcSBBEPEw8ERQcKHiAKBScEESgaBAIDCjghJh4BBAIBAQEBBAECAhUjEQMJAgcIGBMBAQURFgcNDAMHCgYgIQY0IxAcBAETEwgDBBObARgMCwwIFAQEAgIIHAYKKAsDAwkYDQQNDRAjLg9eXgE4AQQHDhQHA4g0AgQqKwICGgUECAkVHAEHFAMDCAcKAx4iCgcGARwCBAwPJjAHDgQCwgMJIiIJAg0UFBIRDgQ=",
 }
 
-// -------------------------------------------------------------------------
-// Wire helpers
-// -------------------------------------------------------------------------
-
-func sendClearAll() {
-	fmt.Fprint(os.Stdout, "\x1b_1cc6D;c\x1b\\")
-}
-
-func sendRegister(cp rune, payload string) {
-	// `fmt` is implicit (`glyf`); `upm` defaults to 1000 but we send
-	// it explicitly to match the font's authoring EM.
+func sendRegisterGlyf(out io.Writer, cp rune, payload string) {
+	// `fmt` is implicit (`glyf`). `upm` defaults to 1000 but we send
+	// it explicitly to match the source font's authoring EM. The
+	// `reply=0` level tells the terminal to register silently — no
+	// `status=0` ACK — which keeps the shell prompt clean on exit
+	// (otherwise the queued ACK bytes spill to the next prompt).
 	fmt.Fprintf(
-		os.Stdout,
-		"\x1b_1cc6D;r;cp=%x;upm=1000;%s\x1b\\",
+		out,
+		"\x1b_25a1;r;cp=%x;reply=0;upm=1000;%s\x1b\\",
 		cp, payload,
 	)
 }
 
-func registerAll() {
+func sendRegisterColrv1(out io.Writer, cp rune, payload string) {
+	fmt.Fprintf(
+		out,
+		"\x1b_25a1;r;cp=%x;fmt=colrv1;reply=2;upm=1000;%s\x1b\\",
+		cp, payload,
+	)
+}
+
+func sendRegisterColrv0(out io.Writer, cp rune, upm uint32, payload string) {
+	fmt.Fprintf(
+		out,
+		"\x1b_25a1;r;cp=%x;fmt=colrv0;reply=2;upm=%d;%s\x1b\\",
+		cp, upm, payload,
+	)
+}
+
+func registerGlyfSlots(out io.Writer) {
+	// The payloads are multi-KB. We flush after every register so the
+	// PTY never has a chance to split a single APC body across two
+	// writes mid-payload; each APC goes out as one atomic chunk.
 	for i, cp := range slotCps {
-		sendRegister(cp, nerdGlyfsB64[i])
+		sendRegisterGlyf(out, cp, nerdGlyfsB64[i])
+		flush(out)
 	}
 }
 
-// -------------------------------------------------------------------------
-// Styles
-// -------------------------------------------------------------------------
+func registerNabla(out io.Writer) {
+	for _, e := range nablaLetters {
+		sendRegisterColrv1(out, e.Cp, e.Payload)
+		flush(out)
+	}
+}
 
-var (
-	// Charm-ish palette.
-	colPink   = lipgloss.Color("#FF6AC7")
-	colPurple = lipgloss.Color("#C4A0FA")
-	colTeal   = lipgloss.Color("#00D7AF")
-	colRed    = lipgloss.Color("#FF5F87")
-	colDim    = lipgloss.Color("#7A7A8C")
-	colFg     = lipgloss.Color("#F0F0F5")
-	colMuted  = lipgloss.Color("#313138")
-	colAccent = lipgloss.Color("#9D7CFF")
+func registerZupra(out io.Writer) {
+	for _, e := range zupraLetters {
+		sendRegisterColrv0(out, e.Cp, zupraUpm, e.Payload)
+		flush(out)
+	}
+}
 
-	titleStyle = lipgloss.NewStyle().
-			Foreground(colPink).
-			Bold(true).
-			Padding(0, 2)
+func flush(out io.Writer) {
+	if f, ok := out.(interface{ Sync() error }); ok {
+		_ = f.Sync()
+	}
+}
 
-	subtitleStyle = lipgloss.NewStyle().
-			Foreground(colDim).
-			Italic(true).
-			Padding(0, 2).
-			MarginBottom(1)
+func nablaRenderedText() string {
+	var b strings.Builder
+	for _, ch := range nablaText {
+		mapped := ch
+		for _, e := range nablaLetters {
+			if e.Letter == ch {
+				mapped = e.Cp
+				break
+			}
+		}
+		b.WriteRune(mapped)
+	}
+	return b.String()
+}
 
-	promptBox = lipgloss.NewStyle().
-			Padding(1, 0).
-			MarginBottom(1)
+func zupraRenderedText() string {
+	var b strings.Builder
+	for _, ch := range zupraText {
+		mapped := ch
+		for _, e := range zupraLetters {
+			if e.Letter == ch {
+				mapped = e.Cp
+				break
+			}
+		}
+		b.WriteRune(mapped)
+	}
+	return b.String()
+}
 
-	segmentStyle = lipgloss.NewStyle().
-			Foreground(colFg).
-			Padding(0, 1)
+func glyfIcons() string {
+	parts := make([]string, 0, len(slotCps))
+	for _, cp := range slotCps {
+		parts = append(parts, string(cp))
+	}
+	return strings.Join(parts, "  ")
+}
 
-	iconGlow = lipgloss.NewStyle().
-			Foreground(colPink).
-			Bold(true)
-
-	arrow = lipgloss.NewStyle().
-		Foreground(colAccent).
-		Render(" \u276f ")
-
-	tableBox = lipgloss.NewStyle().
-			Border(lipgloss.NormalBorder()).
-			BorderForeground(colDim).
-			Padding(0, 2).
-			MarginBottom(1)
-
-	tableHeaderStyle = lipgloss.NewStyle().
-				Foreground(colAccent).
-				Bold(true).
-				Underline(true)
-
-	cpStyle = lipgloss.NewStyle().
-		Foreground(colDim)
-
-	labelStyle = lipgloss.NewStyle().
-			Foreground(colFg)
-
-	glyphStyle = lipgloss.NewStyle().
-			Foreground(colPink).
-			Bold(true)
-
-	helpBox = lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder()).
-		BorderForeground(colDim).
-		Padding(0, 2)
-
-	keyStyle = lipgloss.NewStyle().
-			Foreground(colAccent).
-			Bold(true)
-
-	descStyle = lipgloss.NewStyle().
-			Foreground(colFg)
-
-	statusOn = lipgloss.NewStyle().
-			Foreground(colTeal).
-			Bold(true)
-
-	statusOff = lipgloss.NewStyle().
-			Foreground(colRed).
-			Bold(true)
+// Protocol bits, mirroring the spec's fmt bitfield.
+const (
+	fmtGlyfBit   uint8 = 0b0000_0001
+	fmtColrv0Bit uint8 = 0b0000_0010
+	fmtColrv1Bit uint8 = 0b0000_0100
 )
 
-// -------------------------------------------------------------------------
-// Model
-// -------------------------------------------------------------------------
+// probeSupport sends `s` and waits up to `timeout` for the terminal
+// to reply with its `fmt` bitfield. Returns (bits, true) on success,
+// or (0, false) on timeout or malformed reply. Caller is responsible
+// for ensuring stdin is currently owned by this process.
+func probeSupport(timeout time.Duration) (uint8, bool) {
+	fd := os.Stdin.Fd()
+	oldState, err := term.MakeRaw(fd)
+	if err != nil {
+		return 0, false
+	}
+	defer term.Restore(fd, oldState) //nolint:errcheck
 
-type model struct {
-	cleared bool
-}
+	reader, err := cancelreader.NewReader(os.Stdin)
+	if err != nil {
+		return 0, false
+	}
+	defer reader.Close()
 
-func (m model) Init() tea.Cmd {
-	registerAll()
-	return nil
-}
+	fmt.Fprint(os.Stdout, "\x1b_25a1;s\x1b\\")
 
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyPressMsg:
-		switch msg.String() {
-		case "q", "esc", "ctrl+c":
-			sendClearAll()
-			return m, tea.Quit
-		case "up":
-			registerAll()
-			m.cleared = false
-		case "down":
-			sendClearAll()
-			m.cleared = true
+	type result struct {
+		fmt uint8
+		ok  bool
+	}
+	ch := make(chan result, 1)
+
+	go func() {
+		collected := make([]byte, 0, 64)
+		buf := make([]byte, 256)
+		for {
+			n, err := reader.Read(buf)
+			if err != nil {
+				ch <- result{0, false}
+				return
+			}
+			collected = append(collected, buf[:n]...)
+			if bytes.Contains(collected, []byte("\x1b\\")) {
+				if v, ok := parseFmtField(collected); ok {
+					ch <- result{v, true}
+				} else {
+					ch <- result{0, false}
+				}
+				return
+			}
+			if len(collected) > 2048 {
+				ch <- result{0, false}
+				return
+			}
 		}
+	}()
+
+	select {
+	case r := <-ch:
+		return r.fmt, r.ok
+	case <-time.After(timeout):
+		reader.Cancel()
+		return 0, false
 	}
-	return m, nil
 }
 
-// -------------------------------------------------------------------------
-// View
-// -------------------------------------------------------------------------
-
-// renderPrompt builds a Powerline-flavoured line with colored segments.
-// Each segment holds one icon + its label, separated by a chevron.
-func renderPrompt() string {
-	segments := []string{"main", "src", "~", "favs", "rio"}
-	var parts []string
-	for i, cp := range slotCps {
-		glyph := iconGlow.Render(string(cp))
-		label := segments[i]
-		seg := segmentStyle.Render(glyph + "  " + label)
-		parts = append(parts, seg)
+// parseFmtField locates `fmt=` in an APC reply and parses the decimal
+// u8 that follows.
+func parseFmtField(data []byte) (uint8, bool) {
+	needle := []byte("fmt=")
+	i := bytes.Index(data, needle)
+	if i < 0 {
+		return 0, false
 	}
-	return strings.Join(parts, arrow)
-}
-
-// renderTable lays out a neat three-column table.
-func renderTable() string {
-	var b strings.Builder
-	b.WriteString(tableHeaderStyle.Render(
-		fmt.Sprintf("%-10s  %-8s  %s", "CODEPOINT", "LABEL", "ICON"),
-	))
-	b.WriteByte('\n')
-	for i, cp := range slotCps {
-		b.WriteString(cpStyle.Render(fmt.Sprintf("U+%06X", cp)))
-		b.WriteString("  ")
-		b.WriteString(labelStyle.Render(fmt.Sprintf("%-8s", slotLabels[i])))
-		b.WriteString("  ")
-		b.WriteString(glyphStyle.Render(string(cp)))
-		b.WriteByte('\n')
+	start := i + len(needle)
+	end := start
+	for end < len(data) && data[end] >= '0' && data[end] <= '9' {
+		end++
 	}
-	return strings.TrimRight(b.String(), "\n")
-}
-
-func renderHelp(cleared bool) string {
-	keyLine := func(key, desc string) string {
-		return keyStyle.Render(key) + "  " + descStyle.Render(desc)
+	if end == start {
+		return 0, false
 	}
-	var status string
-	if cleared {
-		status = statusOff.Render("\u25cb ") +
-			descStyle.Render("cleared") +
-			" " + cpStyle.Render("(press \u2191 to re-register)")
-	} else {
-		status = statusOn.Render("\u25cf ") +
-			descStyle.Render("5 Nerd Font outlines registered")
+	v, err := strconv.ParseUint(string(data[start:end]), 10, 8)
+	if err != nil {
+		return 0, false
 	}
-	return strings.Join([]string{
-		keyLine("\u2191", "re-register all"),
-		keyLine("\u2193", "clear all registrations"),
-		keyLine("q", "quit"),
-		"",
-		status,
-	}, "\n")
+	return uint8(v), true
 }
-
-func (m model) View() string {
-	title := titleStyle.Render("\u2726 Glyph Protocol")
-	subtitle := subtitleStyle.Render(
-		"Real Nerd Font outlines at empty Supplementary PUA-B codepoints",
-	)
-	prompt := promptBox.Render(renderPrompt())
-	table := tableBox.Render(renderTable())
-	help := helpBox.Render(renderHelp(m.cleared))
-	return lipgloss.JoinVertical(
-		lipgloss.Center,
-		title,
-		subtitle,
-		prompt,
-		table,
-		help,
-	)
-}
-
-// -------------------------------------------------------------------------
-// Main
-// -------------------------------------------------------------------------
 
 func main() {
-	// Note on cleanup: we deliberately do NOT send `c` on exit.
-	// The terminal would reply with `status=0`, and because the reply
-	// arrives in the PTY after bubbletea has torn down its input
-	// reader, the bytes spill out to the user's shell as a visible
-	// `.1cc6D;c;status=0`. Per spec, registrations live for the
-	// terminal session anyway; the user can press `↓` to clear
-	// explicitly if they want.
-	p := tea.NewProgram(model{}, tea.WithAltScreen())
-	if _, err := p.Run(); err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
-		os.Exit(1)
+	bits, ok := probeSupport(200 * time.Millisecond)
+	if !ok {
+		fmt.Fprintln(os.Stderr,
+			"This terminal does not implement Glyph Protocol. Run in Rio or "+
+				"another conformant terminal to see the demo.")
+		return
 	}
+
+	hasGlyf := bits&fmtGlyfBit != 0
+	hasColrv0 := bits&fmtColrv0Bit != 0
+	hasColrv1 := bits&fmtColrv1Bit != 0
+
+	if hasGlyf {
+		registerGlyfSlots(os.Stdout)
+	}
+	if hasColrv0 {
+		registerZupra(os.Stdout)
+	}
+	if hasColrv1 {
+		registerNabla(os.Stdout)
+	}
+	flush(os.Stdout)
+
+	fmt.Println()
+
+	colrv1Line := "(colrv1 not advertised by terminal)"
+	if hasColrv1 {
+		colrv1Line = nablaRenderedText()
+	}
+	colrv0Line := "(colrv0 not advertised by terminal)"
+	if hasColrv0 {
+		colrv0Line = zupraRenderedText()
+	}
+	glyfLine := "(glyf not advertised by terminal)"
+	if hasGlyf {
+		glyfLine = glyfIcons()
+	}
+
+	fmt.Printf("colrv1 example: \x1b[48;2;21;49;162m%s\x1b[0m\n", colrv1Line)
+	fmt.Printf("colrv1 example: %s\n", colrv1Line)
+	fmt.Printf("colrv0 example: %s\n", colrv0Line)
+	fmt.Printf("glyf examples:  %s\n", glyfLine)
 }

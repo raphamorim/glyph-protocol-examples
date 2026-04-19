@@ -2,9 +2,10 @@
 name = "ratatui-glyph-protocol-example"
 version = "0.1.0"
 edition = "2021"
-description = "Arrow-key demo of the Glyph Protocol (APC 1cc6D), rendered through ratatui."
+description = "Plain-CLI demo of the Glyph Protocol (APC 25a1) from Rust."
 
 [dependencies]
-ratatui = "0.29"
 crossterm = "0.28"
-base64 = "0.22"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
