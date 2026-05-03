@@ -129,15 +129,10 @@ function glyfWideIcons(): string {
 	return wideSlotCps.map(cp => String.fromCodePoint(cp)).join('  ');
 }
 
-// Protocol bits, mirroring the spec's fmt bitfield.
-const FMT_GLYF_BIT = 0b0000_0001;
-const FMT_COLRV0_BIT = 0b0000_0010;
-const FMT_COLRV1_BIT = 0b0000_0100;
-
 // probeSupport sends `s` and waits up to `timeoutMs` for the terminal's
-// reply. Resolves to the `fmt` bitfield on success, or `undefined` on
-// timeout / malformed reply.
-async function probeSupport(timeoutMs: number): Promise<number | undefined> {
+// reply. Resolves to the list of `fmt` names on success, or `undefined`
+// on timeout / malformed reply.
+async function probeSupport(timeoutMs: number): Promise<string[] | undefined> {
 	if (!process.stdin.isTTY) return undefined;
 
 	// Raw mode so the kernel hands us the APC reply as it arrives
@@ -147,7 +142,7 @@ async function probeSupport(timeoutMs: number): Promise<number | undefined> {
 
 	process.stdout.write(`\x1b_25a1;s\x1b\\`);
 
-	return new Promise<number | undefined>(resolve => {
+	return new Promise<string[] | undefined>(resolve => {
 		let collected = Buffer.alloc(0);
 		let settled = false;
 
@@ -157,7 +152,7 @@ async function probeSupport(timeoutMs: number): Promise<number | undefined> {
 			process.stdin.pause();
 			process.stdin.setRawMode(false);
 		};
-		const settle = (value: number | undefined) => {
+		const settle = (value: string[] | undefined) => {
 			if (settled) return;
 			settled = true;
 			cleanup();
@@ -175,23 +170,24 @@ async function probeSupport(timeoutMs: number): Promise<number | undefined> {
 	});
 }
 
-// parseFmtField locates `fmt=` in an APC reply and parses the decimal
-// u8 that follows.
-function parseFmtField(data: Buffer): number | undefined {
+// parseFmtField locates `fmt=` in an APC reply and splits its
+// comma-separated list of format names. Returns [] when the field is
+// empty (terminal advertises no formats); undefined when no `fmt=`
+// field is present.
+function parseFmtField(data: Buffer): string[] | undefined {
 	const i = data.indexOf('fmt=');
 	if (i < 0) return undefined;
 	const start = i + 4;
 	let end = start;
-	while (end < data.length && data[end]! >= 0x30 && data[end]! <= 0x39) {
+	while (end < data.length && data[end] !== 0x3b /* ; */ && data[end] !== 0x1b /* ESC */) {
 		end++;
 	}
-	if (end === start) return undefined;
-	const v = Number.parseInt(data.slice(start, end).toString('ascii'), 10);
-	return Number.isFinite(v) && v >= 0 && v <= 255 ? v : undefined;
+	const value = data.slice(start, end).toString('ascii');
+	return value === '' ? [] : value.split(',');
 }
 
-const fmtBits = await probeSupport(200);
-if (fmtBits === undefined) {
+const fmts = await probeSupport(200);
+if (fmts === undefined) {
 	process.stderr.write(
 		'This terminal does not implement Glyph Protocol. Run in Rio or ' +
 			'another conformant terminal to see the demo.\n',
@@ -199,9 +195,9 @@ if (fmtBits === undefined) {
 	process.exit(0);
 }
 
-const hasGlyf = (fmtBits & FMT_GLYF_BIT) !== 0;
-const hasColrv0 = (fmtBits & FMT_COLRV0_BIT) !== 0;
-const hasColrv1 = (fmtBits & FMT_COLRV1_BIT) !== 0;
+const hasGlyf = fmts.includes('glyf');
+const hasColrv0 = fmts.includes('colrv0');
+const hasColrv1 = fmts.includes('colrv1');
 
 if (hasGlyf) registerGlyfSlots();
 if (hasColrv0) {

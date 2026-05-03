@@ -235,10 +235,10 @@ fn glyf_wide_icons() -> String {
 }
 
 /// Send `s` and wait up to `timeout_ms` for the terminal's reply.
-/// Returns the `fmt` bitfield on success, `None` on timeout or
+/// Returns the list of `fmt` names on success, `None` on timeout or
 /// unrecognised reply. Caller owns raw-mode setup / teardown.
 #[cfg(unix)]
-fn probe_support(timeout_ms: i32) -> Option<u8> {
+fn probe_support(timeout_ms: i32) -> Option<Vec<String>> {
     use std::io::Read;
     use std::os::unix::io::AsRawFd;
 
@@ -288,38 +288,29 @@ fn probe_support(timeout_ms: i32) -> Option<u8> {
 }
 
 #[cfg(not(unix))]
-fn probe_support(_timeout_ms: i32) -> Option<u8> {
+fn probe_support(_timeout_ms: i32) -> Option<Vec<String>> {
     // No portable non-blocking TTY read on other platforms; assume
     // `glyf` support optimistically. Unsupported terminals silently
     // drop the register sequences below, so the demo degrades cleanly.
-    Some(0b0000_0001)
+    Some(vec!["glyf".to_string()])
 }
 
-/// Scan an APC reply for the `fmt=` field and parse its decimal u8.
-fn parse_fmt_field(data: &[u8]) -> Option<u8> {
+/// Scan an APC reply for the `fmt=` field and split its comma-separated
+/// list of format names. Returns `Some(vec![])` when the field is empty
+/// (terminal advertises no formats); `None` when no `fmt=` is found or
+/// the bytes are not valid UTF-8.
+fn parse_fmt_field(data: &[u8]) -> Option<Vec<String>> {
     let i = data.windows(4).position(|w| w == b"fmt=")? + 4;
-    let mut v: u32 = 0;
-    let mut any = false;
-    for &b in &data[i..] {
-        if !b.is_ascii_digit() {
-            break;
-        }
-        any = true;
-        v = v.checked_mul(10)?.checked_add((b - b'0') as u32)?;
-        if v > u8::MAX as u32 {
-            return None;
-        }
+    let mut end = i;
+    while end < data.len() && data[end] != b';' && data[end] != b'\x1b' {
+        end += 1;
     }
-    if any {
-        Some(v as u8)
-    } else {
-        None
+    let value = std::str::from_utf8(&data[i..end]).ok()?;
+    if value.is_empty() {
+        return Some(Vec::new());
     }
+    Some(value.split(',').map(|s| s.to_string()).collect())
 }
-
-const FMT_GLYF_BIT: u8 = 0b0000_0001;
-const FMT_COLRV0_BIT: u8 = 0b0000_0010;
-const FMT_COLRV1_BIT: u8 = 0b0000_0100;
 
 fn main() -> io::Result<()> {
     // Raw mode is needed only for the probe — we need stdin to hand
@@ -331,16 +322,16 @@ fn main() -> io::Result<()> {
     let fmt = probe_support(200);
     disable_raw_mode()?;
 
-    let Some(bits) = fmt else {
+    let Some(fmts) = fmt else {
         eprintln!(
             "This terminal does not implement Glyph Protocol. Run in Rio or \
              another conformant terminal to see the demo."
         );
         return Ok(());
     };
-    let has_glyf = bits & FMT_GLYF_BIT != 0;
-    let has_colrv0 = bits & FMT_COLRV0_BIT != 0;
-    let has_colrv1 = bits & FMT_COLRV1_BIT != 0;
+    let has_glyf = fmts.iter().any(|n| n == "glyf");
+    let has_colrv0 = fmts.iter().any(|n| n == "colrv0");
+    let has_colrv1 = fmts.iter().any(|n| n == "colrv1");
 
     let mut stdout = io::stdout();
     if has_glyf {
