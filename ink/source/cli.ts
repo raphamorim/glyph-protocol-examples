@@ -19,6 +19,14 @@ const slotCps: ReadonlyArray<number> = [
 	0x100000, 0x100001, 0x100002, 0x100003, 0x100004,
 ];
 
+// `width=2` slots — the same five outlines re-registered at a fresh
+// PUA-B range so the wide row prints alongside the narrow row for a
+// direct visual comparison. Without `width=2` the terminal would call
+// PUA-B narrow per UAX-11 / wcwidth and pack the icons into one cell.
+const wideSlotCps: ReadonlyArray<number> = [
+	0x100005, 0x100006, 0x100007, 0x100008, 0x100009,
+];
+
 // `glyf` simple-glyph bytes, base64-encoded, extracted from
 // JetBrainsMono Nerd Font via fontTools. units per em = 1000.
 // Source codepoints in the Nerd Font (for reference):
@@ -46,6 +54,14 @@ function sendRegisterGlyf(cp: number, payload: string): void {
 	);
 }
 
+function sendRegisterGlyfWide(cp: number, payload: string): void {
+	// Same as sendRegisterGlyf but with `width=2` so the terminal
+	// reserves two cells for the codepoint at print time.
+	process.stdout.write(
+		`\x1b_25a1;r;cp=${cp.toString(16)};reply=0;upm=1000;width=2;${payload}\x1b\\`,
+	);
+}
+
 function sendRegisterColrv1(cp: number, payload: string): void {
 	process.stdout.write(
 		`\x1b_25a1;r;cp=${cp.toString(16)};fmt=colrv1;reply=2;upm=1000;${payload}\x1b\\`,
@@ -61,6 +77,11 @@ function sendRegisterColrv0(cp: number, upm: number, payload: string): void {
 function registerGlyfSlots(): void {
 	for (let i = 0; i < slotCps.length; i++) {
 		sendRegisterGlyf(slotCps[i]!, nerdGlyfsB64[i]!);
+	}
+	// Wide row: the same five outlines, re-registered at a fresh PUA-B
+	// range with `width=2` so each occupies two terminal cells.
+	for (let i = 0; i < wideSlotCps.length; i++) {
+		sendRegisterGlyfWide(wideSlotCps[i]!, nerdGlyfsB64[i]!);
 	}
 }
 
@@ -102,6 +123,10 @@ function remapText(
 
 function glyfIcons(): string {
 	return slotCps.map(cp => String.fromCodePoint(cp)).join('  ');
+}
+
+function glyfWideIcons(): string {
+	return wideSlotCps.map(cp => String.fromCodePoint(cp)).join('  ');
 }
 
 // Protocol bits, mirroring the spec's fmt bitfield.
@@ -201,6 +226,7 @@ const colrv0Emoji = hasColrv0
 	? remapText(twemojiText, twemojiLetters)
 	: '(colrv0 not advertised by terminal)';
 const glyfLine = hasGlyf ? glyfIcons() : '(glyf not advertised by terminal)';
+const glyfWideLine = hasGlyf ? glyfWideIcons() : '(glyf not advertised by terminal)';
 
 process.stdout.write('\n');
 process.stdout.write(`colrv1 example: \x1b[48;2;21;49;162m${colrv1Line}\x1b[0m\n`);
@@ -209,3 +235,4 @@ process.stdout.write(`colrv1 example: ${colrv1Emoji}\n`);
 process.stdout.write(`colrv0 example: ${colrv0Line}\n`);
 process.stdout.write(`colrv0 example: ${colrv0Emoji}\n`);
 process.stdout.write(`glyf examples:  ${glyfLine}\n`);
+process.stdout.write(`glyf wide ex.:  ${glyfWideLine}\n`);

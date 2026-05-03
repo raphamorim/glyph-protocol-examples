@@ -29,6 +29,14 @@ var slotCps = [5]rune{
 	0x100000, 0x100001, 0x100002, 0x100003, 0x100004,
 }
 
+// `width=2` slots — the same five outlines re-registered at a fresh
+// PUA-B range so the wide row prints alongside the narrow row for a
+// direct visual comparison. Without `width=2` the terminal would call
+// PUA-B narrow per UAX-11 / wcwidth and pack the icons into one cell.
+var wideSlotCps = [5]rune{
+	0x100005, 0x100006, 0x100007, 0x100008, 0x100009,
+}
+
 // `glyf` simple-glyph bytes, base64-encoded, extracted from
 // JetBrainsMono Nerd Font via fontTools. units per em = 1000.
 // Source codepoints in the Nerd Font (for reference):
@@ -54,7 +62,17 @@ func sendRegisterGlyf(out io.Writer, cp rune, payload string) {
 	// (otherwise the queued ACK bytes spill to the next prompt).
 	fmt.Fprintf(
 		out,
-		"\x1b_25a1;r;cp=%x;reply=0;upm=1000;%s\x1b\\",
+		"\x1b_25a1;r;cp=%x;reply=2;upm=1000;%s\x1b\\",
+		cp, payload,
+	)
+}
+
+func sendRegisterGlyfWide(out io.Writer, cp rune, payload string) {
+	// Same as sendRegisterGlyf but with `width=2` so the terminal
+	// reserves two cells for the codepoint at print time.
+	fmt.Fprintf(
+		out,
+		"\x1b_25a1;r;cp=%x;reply=2;upm=1000;width=2;%s\x1b\\",
 		cp, payload,
 	)
 }
@@ -81,6 +99,12 @@ func registerGlyfSlots(out io.Writer) {
 	// writes mid-payload; each APC goes out as one atomic chunk.
 	for i, cp := range slotCps {
 		sendRegisterGlyf(out, cp, nerdGlyfsB64[i])
+		flush(out)
+	}
+	// Wide row: the same five outlines, re-registered at a fresh PUA-B
+	// range with `width=2` so each occupies two terminal cells.
+	for i, cp := range wideSlotCps {
+		sendRegisterGlyfWide(out, cp, nerdGlyfsB64[i])
 		flush(out)
 	}
 }
@@ -182,6 +206,14 @@ func notoFruitRenderedText() string {
 func glyfIcons() string {
 	parts := make([]string, 0, len(slotCps))
 	for _, cp := range slotCps {
+		parts = append(parts, string(cp))
+	}
+	return strings.Join(parts, "  ")
+}
+
+func glyfWideIcons() string {
+	parts := make([]string, 0, len(wideSlotCps))
+	for _, cp := range wideSlotCps {
 		parts = append(parts, string(cp))
 	}
 	return strings.Join(parts, "  ")
@@ -316,8 +348,10 @@ func main() {
 		colrv0Emoji = twemojiRenderedText()
 	}
 	glyfLine := "(glyf not advertised by terminal)"
+	glyfWideLine := "(glyf not advertised by terminal)"
 	if hasGlyf {
 		glyfLine = glyfIcons()
+		glyfWideLine = glyfWideIcons()
 	}
 
 	colrv1Emoji := "(colrv1 not advertised by terminal)"
@@ -331,4 +365,5 @@ func main() {
 	fmt.Printf("colrv0 example: %s\n", colrv0Line)
 	fmt.Printf("colrv0 example: %s\n", colrv0Emoji)
 	fmt.Printf("glyf examples:  %s\n", glyfLine)
+	fmt.Printf("glyf wide ex.:  %s\n", glyfWideLine)
 }

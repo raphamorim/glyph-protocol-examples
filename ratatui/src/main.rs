@@ -24,6 +24,14 @@ const SLOT_CPS: [u32; 5] = [
     0x10_0000, 0x10_0001, 0x10_0002, 0x10_0003, 0x10_0004,
 ];
 
+/// `width=2` slots — the same five outlines re-registered at a fresh
+/// PUA-B range so the wide row prints alongside the narrow row for a
+/// direct visual comparison. Without `width=2` the terminal would call
+/// PUA-B narrow per UAX-11 / wcwidth and pack the icons into one cell.
+const WIDE_SLOT_CPS: [u32; 5] = [
+    0x10_0005, 0x10_0006, 0x10_0007, 0x10_0008, 0x10_0009,
+];
+
 /// `glyf` simple-glyph bytes, base64-encoded, extracted from
 /// JetBrainsMono Nerd Font via fontTools. `units per em` is 1000.
 /// Source codepoints in the Nerd Font (for reference):
@@ -53,6 +61,20 @@ fn send_register_glyf(
     write!(
         out,
         "\x1b_25a1;r;cp={:x};reply=0;upm=1000;{}\x1b\\",
+        cp, payload
+    )
+}
+
+fn send_register_glyf_wide(
+    out: &mut impl Write,
+    cp: u32,
+    payload: &str,
+) -> io::Result<()> {
+    // Same as send_register_glyf but with `width=2` so the terminal
+    // reserves two cells for the codepoint at print time.
+    write!(
+        out,
+        "\x1b_25a1;r;cp={:x};reply=0;upm=1000;width=2;{}\x1b\\",
         cp, payload
     )
 }
@@ -91,6 +113,12 @@ fn register_glyf_slots(out: &mut impl Write) -> io::Result<()> {
     // A flush per message makes each APC a single atomic write.
     for (cp, payload) in SLOT_CPS.iter().zip(NERD_GLYFS_B64.iter()) {
         send_register_glyf(out, *cp, payload)?;
+        out.flush()?;
+    }
+    // Wide row: the same five outlines, re-registered at a fresh PUA-B
+    // range with `width=2` so each occupies two terminal cells.
+    for (cp, payload) in WIDE_SLOT_CPS.iter().zip(NERD_GLYFS_B64.iter()) {
+        send_register_glyf_wide(out, *cp, payload)?;
         out.flush()?;
     }
     Ok(())
@@ -182,6 +210,19 @@ fn noto_fruit_text() -> String {
 
 fn glyf_icons() -> String {
     SLOT_CPS
+        .iter()
+        .map(|cp| char::from_u32(*cp).unwrap())
+        .fold(String::new(), |mut acc, ch| {
+            if !acc.is_empty() {
+                acc.push_str("  ");
+            }
+            acc.push(ch);
+            acc
+        })
+}
+
+fn glyf_wide_icons() -> String {
+    WIDE_SLOT_CPS
         .iter()
         .map(|cp| char::from_u32(*cp).unwrap())
         .fold(String::new(), |mut acc, ch| {
@@ -342,6 +383,11 @@ fn main() -> io::Result<()> {
     } else {
         String::from("(glyf not advertised by terminal)")
     };
+    let glyf_wide_line = if has_glyf {
+        glyf_wide_icons()
+    } else {
+        String::from("(glyf not advertised by terminal)")
+    };
 
     println!("colrv1 example: \x1b[48;2;21;49;162m{}\x1b[0m", colrv1_line);
     println!("colrv1 example: {}", colrv1_line);
@@ -349,6 +395,7 @@ fn main() -> io::Result<()> {
     println!("colrv0 example: {}", colrv0_line);
     println!("colrv0 example: {}", colrv0_emoji);
     println!("glyf examples:  {}", glyf_line);
+    println!("glyf wide ex.:  {}", glyf_wide_line);
 
     Ok(())
 }
