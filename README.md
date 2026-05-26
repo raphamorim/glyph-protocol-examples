@@ -39,8 +39,9 @@ posts:
 | [ratatui](./ratatui)   | Rust       | `cd ratatui && cargo run` |
 | [bubbletea](./bubbletea) | Go         | `cd bubbletea && go run .` |
 | [ink](./ink)       | TypeScript | `cd ink && npm install && npm run build && npm start` |
+| [ncurses-jam](./ncurses-jam) | Jam | `cd ncurses-jam && jam run -lncurses glyph.jam` |
 
-All three share the same wire behaviour, printed layout, and payload
+All four share the same wire behaviour, printed layout, and payload
 constants — only the language differs. The directory names are
 historical: the demos no longer use ratatui / bubbletea / ink, since
 the point is the protocol, not the TUI framework. If you want to port

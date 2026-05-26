@@ -1,0 +1,216 @@
+// Glyph Protocol demo — Jam + ncurses.
+//
+// A fourth port of the demo that lives beside the Rust / Go / TS ones.
+// It exercises the protocol's three payload formats:
+//
+//   colrv1 : "Rio Terminal Emulator" via Typearture's Nabla, plus Noto
+//            fruit emoji.
+//   colrv0 : "Using Glyph protocol" via Zupra 3D eYe/FS, plus Twemoji.
+//   glyf   : five Nerd Font outlines (branch / folder / home / heart /
+//            Rust cog), narrow and width=2.
+//
+// The flow mirrors the others: probe the terminal's `fmt` support,
+// register the glyphs it advertises, then print labelled lines (or a
+// labelled fallback per missing format).
+//
+// ncurses is used only for the probe. The protocol negotiates support
+// with the `s` verb, and reading the terminal's reply needs raw,
+// no-echo input — exactly what ncurses' cbreak/noecho/getch give us
+// (the same toolkit tetris.jam uses). We enter curses, ask, read the
+// reply with a short timeout, then endwin() back to the normal screen
+// so the registrations and the printed glyph lines land in the usual
+// terminal flow / scrollback rather than a wiped alternate screen.
+
+const data = import("glyph_data");
+
+// ncurses (see tetris.jam for the FFI rationale: WINDOW* is opaque so
+// we model it as *const u8, and ncurses' bool is unsigned char so we
+// pass i8 with 1 = TRUE).
+extern fn initscr() *const u8;
+extern fn endwin() i32;
+extern fn cbreak() i32;
+extern fn noecho() i32;
+extern fn keypad(win: *const u8, bf: i8) i32;
+extern fn nodelay(win: *const u8, bf: i8) i32;
+extern fn curs_set(visibility: i32) i32;
+extern fn getch() i32;
+extern fn napms(ms: i32) i32;
+
+extern fn write(fd: i32, buf: *const[] u8, count: u64) i64;
+extern fn setlocale(category: i32, locale: *const[] u8) *const[] u8;
+extern fn setenv(name: *const[] u8, value: *const[] u8, overwrite: i32) i32;
+
+fn puts(s: []u8) {
+    write(1, s.ptr, s.len);
+}
+
+fn eputs(s: []u8) {
+    write(2, s.ptr, s.len);
+}
+
+// Does buf[0..len) contain `needle` as a byte substring?
+fn containsSub(buf: *const[] u8, len: u32, needle: []u8) bool {
+    if (needle.len == 0) {
+        return true;
+    }
+    if (needle.len > len) {
+        return false;
+    }
+    var i: u32 = 0;
+    while (i + (needle.len as u32) <= len) {
+        var j: u32 = 0;
+        var hit: bool = true;
+        while (j < (needle.len as u32)) {
+            if (buf[i + j] != needle.ptr[j]) {
+                hit = false;
+                break;
+            }
+            j = j + 1;
+        }
+        if (hit) {
+            return true;
+        }
+        i = i + 1;
+    }
+    return false;
+}
+
+fn main() {
+    // Match xterm-256color before ncurses reads $TERM (see tetris.jam:
+    // some terminfo entries make ncurses behave differently), and set a
+    // UTF-8 locale so wide PUA codepoints are emitted intact.
+    var termVar: []u8 = "TERM";
+    var termVal: []u8 = "xterm-256color";
+    setenv(termVar.ptr, termVal.ptr, 1);
+    var loc: []u8 = "";
+    setlocale(0, loc.ptr);
+
+    var win: *const u8 = initscr();
+    cbreak();
+    noecho();
+    // keypad off: we want the APC reply as raw bytes, not translated
+    // into ncurses KEY_* codes.
+    keypad(win, 0);
+    nodelay(win, 1);
+    curs_set(0);
+
+    var probe: []u8 = "\x1b_25a1;s\x1b\\";
+    write(1, probe.ptr, probe.len);
+
+    var buf: [512]u8 = [0; 512];
+    var len: u32 = 0;
+    var elapsed: i32 = 0;
+    var done: bool = false;
+    // Collect until the APC string-terminator (ESC `\`) or ~250ms.
+    while (elapsed < 250) {
+        if (done) {
+            break;
+        }
+        var c: i32 = getch();
+        if (c == -1) {
+            napms(4);
+            elapsed = elapsed + 4;
+        } else {
+            if (len < 512) {
+                buf[len] = c as u8;
+                len = len + 1;
+            }
+            if (len >= 2) {
+                if (buf[len - 1] == 92) {
+                    if (buf[len - 2] == 27) {
+                        done = true;
+                    }
+                }
+            }
+        }
+    }
+
+    endwin();
+
+    // A well-formed reply carries a `fmt=` field. No field (timeout or a
+    // non-conformant terminal) means the protocol isn't implemented.
+    var fmtKey: []u8 = "fmt=";
+    var ok: bool = containsSub(&buf[0], len, fmtKey);
+    if (!ok) {
+        var msg: []u8 = "This terminal does not implement Glyph Protocol. Run in Rio or another conformant terminal to see the demo.\n";
+        eputs(msg);
+        return;
+    }
+
+    // Format names appear only inside the advertised `fmt=` list, so a
+    // plain substring test is sufficient (colrv1 does not match colrv0).
+    var glyfName: []u8 = "glyf";
+    var colrv0Name: []u8 = "colrv0";
+    var colrv1Name: []u8 = "colrv1";
+    var hasGlyf: bool = containsSub(&buf[0], len, glyfName);
+    var hasColrv0: bool = containsSub(&buf[0], len, colrv0Name);
+    var hasColrv1: bool = containsSub(&buf[0], len, colrv1Name);
+
+    if (hasGlyf) {
+        data.registerGlyf();
+        data.registerGlyfWide();
+    }
+    if (hasColrv0) {
+        data.registerZupra();
+        data.registerTwemoji();
+    }
+    if (hasColrv1) {
+        data.registerNabla();
+        data.registerNoto();
+    }
+
+    puts("\n");
+
+    var miss: []u8 = "(not advertised by terminal)";
+
+    // colrv1 line, once over a blue background block then plain.
+    var lbl1: []u8 = "colrv1 example: ";
+    if (hasColrv1) {
+        var bgOn: []u8 = "\x1b[48;2;21;49;162m";
+        var bgOff: []u8 = "\x1b[0m";
+        puts(lbl1);
+        puts(bgOn);
+        data.emitNablaText();
+        puts(bgOff);
+        puts("\n");
+        puts(lbl1);
+        data.emitNablaText();
+        puts("\n");
+        puts(lbl1);
+        data.emitNotoText();
+        puts("\n");
+    } else {
+        puts(lbl1);
+        puts(miss);
+        puts("\n");
+    }
+
+    var lbl0: []u8 = "colrv0 example: ";
+    if (hasColrv0) {
+        puts(lbl0);
+        data.emitZupraText();
+        puts("\n");
+        puts(lbl0);
+        data.emitTwemojiText();
+        puts("\n");
+    } else {
+        puts(lbl0);
+        puts(miss);
+        puts("\n");
+    }
+
+    var lblG: []u8 = "glyf examples:  ";
+    var lblGW: []u8 = "glyf wide ex.:  ";
+    if (hasGlyf) {
+        puts(lblG);
+        data.emitGlyfIcons();
+        puts("\n");
+        puts(lblGW);
+        data.emitGlyfWideIcons();
+        puts("\n");
+    } else {
+        puts(lblG);
+        puts(miss);
+        puts("\n");
+    }
+}
