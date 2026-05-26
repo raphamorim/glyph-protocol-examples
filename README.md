@@ -1,7 +1,8 @@
 # glyph-protocol-examples
 
-Three small plain-CLI demos that exercise [Glyph Protocol][blog]'s
-three payload formats in Rust, Go, and TypeScript.
+Small demos that exercise [Glyph Protocol][blog]'s three payload
+formats across Rust, Go, TypeScript, and Jam — plus an
+[ultraviolet](./ultraviolet) full-screen TUI variant in Go.
 
 Each demo probes the terminal for `fmt` support, then prints four
 lines:
@@ -40,13 +41,17 @@ posts:
 | [bubbletea](./bubbletea) | Go         | `cd bubbletea && go run .` |
 | [ink](./ink)       | TypeScript | `cd ink && npm install && npm run build && npm start` |
 | [ncurses-jam](./ncurses-jam) | Jam | `cd ncurses-jam && jam run -lncurses glyph.jam` |
+| [ultraviolet](./ultraviolet) | Go | `cd ultraviolet && go run .` |
 
-All four share the same wire behaviour, printed layout, and payload
-constants — only the language differs. The directory names are
-historical: the demos no longer use ratatui / bubbletea / ink, since
-the point is the protocol, not the TUI framework. If you want to port
-it to another language, the wire helpers at the top of each entry file
-are the whole story (APC sequence construction + base64 payloads).
+The first four share the same wire behaviour, printed layout, and
+payload constants — only the language differs. The `ratatui` /
+`bubbletea` / `ink` directory names are historical: those demos no
+longer use the framework they're named after, since the point is the
+protocol, not the TUI. The exception is `ultraviolet`, which *does*
+drive [Charm's ultraviolet][uv] as a real alt-screen TUI rather than a
+plain-CLI print. If you want to port the protocol to another language,
+the wire helpers at the top of each entry file are the whole story
+(APC sequence construction + base64 payloads).
 
 ## Extracting your own glyphs
 
@@ -127,6 +132,7 @@ Code: MIT, same as Rio. Nabla: [SIL Open Font License 1.1](fonts/OFL.txt).
 
 [blog]: https://rapha.land/introducing-glyph-protocol-for-terminals/
 [rio]: https://raphamorim.io/rio
+[uv]: https://github.com/charmbracelet/ultraviolet
 [nabla]: https://fonts.google.com/specimen/Nabla?preview.script=Latn
 [nanoemoji-fonts]: https://github.com/googlefonts/nanoemoji/tree/main/tests/fonts
 [zupra]: https://www.dafont.com/zupra-3d-eye-fs.font

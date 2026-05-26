@@ -6,7 +6,7 @@ import (
 	"image/color"
 	"log"
 	"os"
-	"strconv"
+	"slices"
 	"strings"
 	"time"
 
@@ -14,12 +14,6 @@ import (
 	"github.com/charmbracelet/ultraviolet/screen"
 	"github.com/charmbracelet/x/term"
 	"github.com/muesli/cancelreader"
-)
-
-const (
-	fmtGlyfBit   uint8 = 0b0000_0001
-	fmtColrv0Bit uint8 = 0b0000_0010
-	fmtColrv1Bit uint8 = 0b0000_0100
 )
 
 var slotCps = [5]rune{
@@ -105,25 +99,25 @@ func glyfIcons() string {
 	return strings.Join(parts, "  ")
 }
 
-func probeSupport(timeout time.Duration) (uint8, bool) {
+func probeSupport(timeout time.Duration) ([]string, bool) {
 	fd := os.Stdin.Fd()
 	oldState, err := term.MakeRaw(fd)
 	if err != nil {
-		return 0, false
+		return nil, false
 	}
 	defer term.Restore(fd, oldState)
 
 	reader, err := cancelreader.NewReader(os.Stdin)
 	if err != nil {
-		return 0, false
+		return nil, false
 	}
 	defer reader.Close()
 
 	fmt.Fprint(os.Stdout, "\x1b_25a1;s\x1b\\")
 
 	type result struct {
-		fmt uint8
-		ok  bool
+		fmts []string
+		ok   bool
 	}
 	ch := make(chan result, 1)
 
@@ -133,7 +127,7 @@ func probeSupport(timeout time.Duration) (uint8, bool) {
 		for {
 			n, err := reader.Read(buf)
 			if err != nil {
-				ch <- result{0, false}
+				ch <- result{nil, false}
 				return
 			}
 			collected = append(collected, buf[:n]...)
@@ -141,12 +135,12 @@ func probeSupport(timeout time.Duration) (uint8, bool) {
 				if v, ok := parseFmtField(collected); ok {
 					ch <- result{v, true}
 				} else {
-					ch <- result{0, false}
+					ch <- result{nil, false}
 				}
 				return
 			}
 			if len(collected) > 2048 {
-				ch <- result{0, false}
+				ch <- result{nil, false}
 				return
 			}
 		}
@@ -154,36 +148,37 @@ func probeSupport(timeout time.Duration) (uint8, bool) {
 
 	select {
 	case r := <-ch:
-		return r.fmt, r.ok
+		return r.fmts, r.ok
 	case <-time.After(timeout):
 		reader.Cancel()
-		return 0, false
+		return nil, false
 	}
 }
 
-func parseFmtField(data []byte) (uint8, bool) {
+// parseFmtField locates `fmt=` in an APC reply and splits its
+// comma-separated list of format names. Returns ([]string{}, true)
+// when the field is empty (terminal advertises no formats); (nil,
+// false) when no `fmt=` field is present.
+func parseFmtField(data []byte) ([]string, bool) {
 	needle := []byte("fmt=")
 	i := bytes.Index(data, needle)
 	if i < 0 {
-		return 0, false
+		return nil, false
 	}
 	start := i + len(needle)
 	end := start
-	for end < len(data) && data[end] >= '0' && data[end] <= '9' {
+	for end < len(data) && data[end] != ';' && data[end] != 0x1b {
 		end++
 	}
-	if end == start {
-		return 0, false
+	value := string(data[start:end])
+	if value == "" {
+		return []string{}, true
 	}
-	v, err := strconv.ParseUint(string(data[start:end]), 10, 8)
-	if err != nil {
-		return 0, false
-	}
-	return uint8(v), true
+	return strings.Split(value, ","), true
 }
 
 func main() {
-	bits, ok := probeSupport(200 * time.Millisecond)
+	fmts, ok := probeSupport(200 * time.Millisecond)
 	if !ok {
 		fmt.Fprintln(os.Stderr,
 			"This terminal does not implement Glyph Protocol. Run in Rio or "+
@@ -191,9 +186,9 @@ func main() {
 		return
 	}
 
-	hasGlyf := bits&fmtGlyfBit != 0
-	hasColrv0 := bits&fmtColrv0Bit != 0
-	hasColrv1 := bits&fmtColrv1Bit != 0
+	hasGlyf := slices.Contains(fmts, "glyf")
+	hasColrv0 := slices.Contains(fmts, "colrv0")
+	hasColrv1 := slices.Contains(fmts, "colrv1")
 
 	t := uv.DefaultTerminal()
 	if err := run(t, hasGlyf, hasColrv0, hasColrv1); err != nil {
