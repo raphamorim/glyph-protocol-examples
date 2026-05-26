@@ -1,0 +1,6 @@
+# Built binary (default name = directory name)
+/bubbletea
+*.exe
+
+# OS cruft
+.DS_Store
