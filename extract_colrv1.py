@@ -13,7 +13,7 @@ Example:
     python3 extract_colrv1.py fonts/Nabla.ttf 52  # letter R
 
 The script auto-subsets the font to just the glyphs in the paint
-graph for `cp` so the container fits inside the 256-glyph cap and
+graph for `cp` so the container fits inside the 1024-glyph cap and
 64 KiB per-payload limit of Glyph Protocol. Subsetting is done via
 `fontTools.subset` using `text=<char>`, which transitively pulls
 all layer glyphs referenced from the base glyph's COLR paint.
@@ -46,6 +46,8 @@ from fontTools.pens.ttGlyphPen import TTGlyphPen
 from fontTools.subset import Options, Subsetter
 from fontTools.ttLib import TTFont
 from fontTools.ttLib.tables.ttProgram import Program
+
+from extract_glyphs import check_decoded_budget
 
 
 def load_font(path: Path) -> TTFont:
@@ -147,16 +149,17 @@ def extract(font: TTFont, cp: int) -> bytes:
     base_gid = font.getGlyphID(glyph_name)
 
     order = font.getGlyphOrder()
-    if len(order) > 256:
+    if len(order) > 1024:
         raise SystemExit(
             f"after subset the container would carry {len(order)} glyphs, "
-            "above the 256 per-payload cap. The COLR paint graph for this "
+            "above the 1024 per-payload cap. The COLR paint graph for this "
             "codepoint is unusually deep."
         )
 
     # Compile each glyph's bytes in GID order. The COLR table still
     # references them by GID so no remapping is needed.
     glyph_bytes = [compile_glyph_bytes(font, name) for name in order]
+    check_decoded_budget(glyph_bytes, f"U+{cp:04X}")
 
     # Ask fontTools for the compiled table bytes. `getTableData` gives
     # us the raw on-disk bytes without us having to assemble a full

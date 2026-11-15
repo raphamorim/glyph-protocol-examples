@@ -31,10 +31,64 @@ var slotCps = [5]rune{
 
 // `width=2` slots — the same five outlines re-registered at a fresh
 // PUA-B range so the wide row prints alongside the narrow row for a
-// direct visual comparison. Without `width=2` the terminal would call
-// PUA-B narrow per UAX-11 / wcwidth and pack the icons into one cell.
+// direct visual comparison. `width=2` only widens the pixels a glyph
+// is drawn into: the codepoint still takes one column (its wcwidth),
+// so the printed text leaves a blank cell after each one.
 var wideSlotCps = [5]rune{
 	0x100005, 0x100006, 0x100007, 0x100008, 0x100009,
+}
+
+// The Nerd Font icons are drawn for the font's own cell: a 600 unit
+// advance, ascender 1020 and descender -300 at upm 1000. Declaring
+// that extent (§8.5.1) places every icon the way the patched font
+// would, and keeps the five in proportion to each other. Without it
+// the terminal would size each outline from its own bounds.
+const nerdExtent = "aw=600;lh=1320;ymin=-300"
+
+// The placement rows declare a square em around the heart instead
+// (the heart spans x 0..923, y -35..761). A terminal cell is taller
+// than it is wide, so a square extent is where the size modes differ.
+const placementExtent = "aw=1000;lh=1000;ymin=-120"
+
+// Placement demo slots — the Nerd Font heart outline registered
+// repeatedly at a fresh PUA-B range, each registration carrying
+// different §8.5 sizing/placement parameters (`size=`, `align=`,
+// `pad=`, `width=`). Printed over a grey background block so the
+// cell box — and where the glyph lands inside it — is visible.
+var placementSlots = []struct {
+	Cp     rune
+	Params string
+}{
+	// Size modes (§8.5.3): height scales the extent to the cell's
+	// height (may overflow sideways and get clipped), contain is the
+	// default and fits it inside, cover fills the cell (may overflow),
+	// stretch distorts to fill both axes exactly.
+	{0x100070, "size=height"},
+	{0x100071, "size=contain"},
+	// In a cell taller than wide, a square extent makes cover pick the
+	// height factor, so this heart renders the same as the height one,
+	// while contain fits by width. That's correct: the modes only
+	// differ by which axis wins.
+	{0x100072, "size=cover"},
+	{0x100073, "size=stretch"},
+	// Alignment (§8.5.4) — where the scaled outline sits in the span.
+	{0x100074, "size=contain;align=start,start"},
+	{0x100075, "size=contain;align=end,end"},
+	// `baseline` puts the outline's y=0 on the text baseline, so a
+	// character-like glyph sits on the same line as adjacent text.
+	{0x100076, "size=contain;align=center,baseline"},
+	// Pad (§8.5.2) insets the render span before scaling.
+	{0x100077, "size=stretch;pad=0.2,0.2,0.2,0.2"},
+	// width=2 with contain: one glyph drawn across two cells.
+	{0x100078, "width=2;size=contain"},
+}
+
+// Each letter of the colour demos is registered with the font's line
+// height and descender, plus its own advance. size=height scales by
+// line height alone, so every letter gets the same scale and they all
+// sit on one baseline; the advance centres each letter in its cell.
+func letterExtent(advance, lineHeight, ymin int) string {
+	return fmt.Sprintf("aw=%d;lh=%d;ymin=%d;size=height", advance, lineHeight, ymin)
 }
 
 // `glyf` simple-glyph bytes, base64-encoded, extracted from
@@ -57,23 +111,33 @@ var nerdGlyfsB64 = [5]string{
 func sendRegisterGlyf(out io.Writer, cp rune, payload string) {
 	// `fmt` is implicit (`glyf`). `upm` defaults to 1000 but we send
 	// it explicitly to match the source font's authoring EM. The
-	// `reply=0` level tells the terminal to register silently — no
-	// `status=0` ACK — which keeps the shell prompt clean on exit
-	// (otherwise the queued ACK bytes spill to the next prompt).
+	// `reply=2` level only answers failures, so a successful
+	// registration leaves no `status=0` ACK to spill into the shell
+	// prompt on exit.
 	fmt.Fprintf(
 		out,
-		"\x1b_25a1;r;cp=%x;reply=2;upm=1000;%s\x1b\\",
-		cp, payload,
+		"\x1b_25a1;r;cp=%x;reply=2;upm=1000;%s;%s\x1b\\",
+		cp, nerdExtent, payload,
 	)
 }
 
 func sendRegisterGlyfWide(out io.Writer, cp rune, payload string) {
-	// Same as sendRegisterGlyf but with `width=2` so the terminal
-	// reserves two cells for the codepoint at print time.
+	// Same as sendRegisterGlyf but drawn across two cells. The printed
+	// text keeps the cell after it blank for the overflow.
 	fmt.Fprintf(
 		out,
-		"\x1b_25a1;r;cp=%x;reply=2;upm=1000;width=2;%s\x1b\\",
-		cp, payload,
+		"\x1b_25a1;r;cp=%x;reply=2;upm=1000;%s;width=2;%s\x1b\\",
+		cp, nerdExtent, payload,
+	)
+}
+
+func sendRegisterGlyfPlaced(out io.Writer, cp rune, params, payload string) {
+	// Same as sendRegisterGlyf plus the registration's §8.5
+	// sizing/placement parameters, verbatim from placementSlots.
+	fmt.Fprintf(
+		out,
+		"\x1b_25a1;r;cp=%x;reply=2;upm=1000;%s;%s;%s\x1b\\",
+		cp, placementExtent, params, payload,
 	)
 }
 
@@ -85,11 +149,41 @@ func sendRegisterColrv1(out io.Writer, cp rune, payload string) {
 	)
 }
 
+func sendRegisterColrv1Letter(out io.Writer, cp rune, extent, payload string) {
+	fmt.Fprintf(
+		out,
+		"\x1b_25a1;r;cp=%x;fmt=colrv1;reply=2;upm=1000;%s;%s\x1b\\",
+		cp, extent, payload,
+	)
+}
+
+// Offset for the width=2 duplicates of the Nabla letters: the same
+// colrv1 payloads re-registered at cp+nablaWideOffset (0x100020 to
+// 0x10002C, free between the Nabla and Zupra ranges) so the second
+// colrv1 line renders each letter across two cells.
+const nablaWideOffset rune = 0x10
+
+func sendRegisterColrv1Wide(out io.Writer, cp rune, extent, payload string) {
+	fmt.Fprintf(
+		out,
+		"\x1b_25a1;r;cp=%x;fmt=colrv1;reply=2;upm=1000;%s;width=2;%s\x1b\\",
+		cp, extent, payload,
+	)
+}
+
 func sendRegisterColrv0(out io.Writer, cp rune, upm uint32, payload string) {
 	fmt.Fprintf(
 		out,
 		"\x1b_25a1;r;cp=%x;fmt=colrv0;reply=2;upm=%d;%s\x1b\\",
 		cp, upm, payload,
+	)
+}
+
+func sendRegisterColrv0Letter(out io.Writer, cp rune, upm uint32, extent, payload string) {
+	fmt.Fprintf(
+		out,
+		"\x1b_25a1;r;cp=%x;fmt=colrv0;reply=2;upm=%d;%s;%s\x1b\\",
+		cp, upm, extent, payload,
 	)
 }
 
@@ -107,11 +201,21 @@ func registerGlyfSlots(out io.Writer) {
 		sendRegisterGlyfWide(out, cp, nerdGlyfsB64[i])
 		flush(out)
 	}
+	// Placement rows: the heart outline under each §8.5 parameter set.
+	for _, slot := range placementSlots {
+		sendRegisterGlyfPlaced(out, slot.Cp, slot.Params, nerdGlyfsB64[3])
+		flush(out)
+	}
 }
 
 func registerNabla(out io.Writer) {
 	for _, e := range nablaLetters {
-		sendRegisterColrv1(out, e.Cp, e.Payload)
+		extent := letterExtent(e.Advance, nablaLineHeight, nablaYMin)
+		sendRegisterColrv1Letter(out, e.Cp, extent, e.Payload)
+		flush(out)
+		// Wide duplicate for the second colrv1 line: same payload at
+		// a fresh codepoint, drawn across two cells with width=2.
+		sendRegisterColrv1Wide(out, e.Cp+nablaWideOffset, extent, e.Payload)
 		flush(out)
 	}
 }
@@ -125,7 +229,8 @@ func registerNotoFruit(out io.Writer) {
 
 func registerZupra(out io.Writer) {
 	for _, e := range zupraLetters {
-		sendRegisterColrv0(out, e.Cp, zupraUpm, e.Payload)
+		extent := letterExtent(e.Advance, zupraLineHeight, zupraYMin)
+		sendRegisterColrv0Letter(out, e.Cp, zupraUpm, extent, e.Payload)
 		flush(out)
 	}
 }
@@ -154,6 +259,32 @@ func nablaRenderedText() string {
 			}
 		}
 		b.WriteRune(mapped)
+	}
+	return b.String()
+}
+
+// Same text through the width=2 duplicates. A width=2 glyph overflows
+// into the following cell in *pixels*; the terminal does not reserve
+// that cell, so the codepoint still counts as one logical column
+// (== system wcwidth → no cursor/copy desync). We author an explicit
+// trailing space after each glyph for the overflow to land on, which
+// also makes the row read as a sequence of two-cell glyphs.
+func nablaWideRenderedText() string {
+	var b strings.Builder
+	for _, ch := range nablaText {
+		mapped := rune(-1)
+		for _, e := range nablaLetters {
+			if e.Letter == ch {
+				mapped = e.Cp + nablaWideOffset
+				break
+			}
+		}
+		if mapped >= 0 {
+			b.WriteRune(mapped)
+			b.WriteRune(' ')
+		} else {
+			b.WriteRune(ch)
+		}
 	}
 	return b.String()
 }
@@ -208,15 +339,33 @@ func glyfIcons() string {
 	for _, cp := range slotCps {
 		parts = append(parts, string(cp))
 	}
-	return strings.Join(parts, "  ")
+	return strings.Join(parts, "")
 }
 
 func glyfWideIcons() string {
+	// Two spaces between icons: a width=2 glyph overflows into the first
+	// (blank) space in pixels — the cell is never reserved, so the
+	// codepoint stays one logical column — and the second space is the
+	// visible gap before the next icon.
 	parts := make([]string, 0, len(wideSlotCps))
 	for _, cp := range wideSlotCps {
 		parts = append(parts, string(cp))
 	}
 	return strings.Join(parts, "  ")
+}
+
+// boxed wraps one placement glyph in a grey background block, so the
+// cell box (and where the §8.5 transform put the outline inside it)
+// is visible.
+func boxed(cp rune) string {
+	return fmt.Sprintf("\x1b[48;2;64;64;64m%s\x1b[0m", string(cp))
+}
+
+// boxedWide does the same for a width=2 glyph. The codepoint takes one
+// column and the glyph overflows into the blank cell after it, so that
+// cell is printed as a space inside the same grey block.
+func boxedWide(cp rune) string {
+	return fmt.Sprintf("\x1b[48;2;64;64;64m%s \x1b[0m", string(cp))
 }
 
 // probeSupport sends `s` and waits up to `timeout` for the terminal
@@ -330,8 +479,10 @@ func main() {
 	fmt.Println()
 
 	colrv1Line := "(colrv1 not advertised by terminal)"
+	colrv1WideLine := "(colrv1 not advertised by terminal)"
 	if hasColrv1 {
 		colrv1Line = nablaRenderedText()
+		colrv1WideLine = nablaWideRenderedText()
 	}
 	colrv0Line := "(colrv0 not advertised by terminal)"
 	colrv0Emoji := "(colrv0 not advertised by terminal)"
@@ -352,10 +503,31 @@ func main() {
 	}
 
 	fmt.Printf("colrv1 example: \x1b[48;2;21;49;162m%s\x1b[0m\n", colrv1Line)
-	fmt.Printf("colrv1 example: %s\n", colrv1Line)
+	// Second line: the same letters via the width=2 duplicates.
+	fmt.Printf("colrv1 example: %s\n", colrv1WideLine)
 	fmt.Printf("colrv1 example: %s\n", colrv1Emoji)
 	fmt.Printf("colrv0 example: %s\n", colrv0Line)
 	fmt.Printf("colrv0 example: %s\n", colrv0Emoji)
 	fmt.Printf("glyf examples:  %s\n", glyfLine)
 	fmt.Printf("glyf wide ex.:  %s\n", glyfWideLine)
+
+	// §8.5 sizing/placement — the same heart outline under different
+	// size= / align= / pad= / width= parameters. The grey block is the
+	// cell box; where the heart lands inside it is the demo.
+	if hasGlyf {
+		fmt.Printf(
+			"placement size: %s  %s  %s  %s   (height / contain / cover / stretch)\n",
+			boxed(0x100070), boxed(0x100071), boxed(0x100072), boxed(0x100073),
+		)
+		fmt.Printf(
+			"placement align: %s %s  xy%sz   (start,start / end,end / baseline in text)\n",
+			boxed(0x100074), boxed(0x100075), boxed(0x100076),
+		)
+		fmt.Printf(
+			"placement more: %s %s   (stretch + pad=0.2 / width=2 contain)\n",
+			boxed(0x100077), boxedWide(0x100078),
+		)
+	} else {
+		fmt.Println("placement:      (glyf not advertised by terminal)")
+	}
 }

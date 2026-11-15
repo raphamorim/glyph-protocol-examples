@@ -1,5 +1,5 @@
 # Built binary (default name = directory name)
-/bubbletea
+/ultraviolet
 *.exe
 *.o
 

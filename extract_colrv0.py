@@ -42,6 +42,8 @@ from fontTools.subset import Options, Subsetter
 from fontTools.ttLib import TTFont
 from fontTools.ttLib.tables.ttProgram import Program
 
+from extract_glyphs import check_decoded_budget
+
 
 def load_font(path: Path) -> TTFont:
     if path.suffix == ".ttx":
@@ -117,13 +119,14 @@ def extract(font: TTFont, cp: int) -> bytes:
     base_gid = font.getGlyphID(glyph_name)
 
     order = font.getGlyphOrder()
-    if len(order) > 256:
+    if len(order) > 1024:
         raise SystemExit(
             f"after subset the container would carry {len(order)} glyphs, "
-            "above the 256 per-payload cap."
+            "above the 1024 per-payload cap."
         )
 
     glyph_bytes = [compile_glyph_bytes(font, name) for name in order]
+    check_decoded_budget(glyph_bytes, f"U+{cp:04X}")
 
     colr_bytes = font.getTableData("COLR")
     cpal_bytes = font.getTableData("CPAL") if "CPAL" in font else b""

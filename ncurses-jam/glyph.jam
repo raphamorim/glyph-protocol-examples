@@ -149,6 +149,7 @@ fn main() {
     if (hasGlyf) {
         data.registerGlyf();
         data.registerGlyfWide();
+        data.registerGlyfPlacement();
     }
     if (hasColrv0) {
         data.registerZupra();
@@ -156,6 +157,7 @@ fn main() {
     }
     if (hasColrv1) {
         data.registerNabla();
+        data.registerNablaWide();
         data.registerNoto();
     }
 
@@ -174,7 +176,8 @@ fn main() {
         puts(bgOff);
         puts("\n");
         puts(lbl1);
-        data.emitNablaText();
+        // Second line: the same letters via the width=2 duplicates.
+        data.emitNablaWideText();
         puts("\n");
         puts(lbl1);
         data.emitNotoText();
@@ -210,6 +213,29 @@ fn main() {
         puts("\n");
     } else {
         puts(lblG);
+        puts(miss);
+        puts("\n");
+    }
+
+    // §8.5 sizing/placement — the heart outline under different size= /
+    // align= / pad= / width= parameters. The grey block is the cell
+    // box; where the heart lands inside it is the demo.
+    var lblPS: []u8 = "placement size: ";
+    var lblPA: []u8 = "placement align: ";
+    var lblPM: []u8 = "placement more: ";
+    if (hasGlyf) {
+        puts(lblPS);
+        data.emitPlacementSizeIcons();
+        puts("   (height / contain / cover / stretch)\n");
+        puts(lblPA);
+        data.emitPlacementAlignIcons();
+        puts("   (start,start / end,end / baseline in text)\n");
+        puts(lblPM);
+        data.emitPlacementMoreIcons();
+        puts("   (stretch + pad=0.2 / width=2 contain)\n");
+    } else {
+        var lblP: []u8 = "placement:      ";
+        puts(lblP);
         puts(miss);
         puts("\n");
     }

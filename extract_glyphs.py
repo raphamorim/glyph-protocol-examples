@@ -16,6 +16,7 @@ Edit TARGETS below to choose which codepoints you want. The script:
 """
 
 import base64
+import struct
 import sys
 
 from fontTools.pens.ttGlyphPen import TTGlyphPen
@@ -30,6 +31,36 @@ TARGETS = [
     (0xF004, "heart"),   # fa-heart
     (0xE7A8, "rust"),    # dev-rust
 ]
+
+# Spec §8.2: one decoded point costs 12 bytes, and a registration may
+# decode to at most 64 KiB (5,461 points), counting every outline a
+# colour container carries. Terminals reject anything bigger with
+# reason=outline_too_large, so the scripts refuse to emit it.
+DECODED_BUDGET = 64 * 1024
+BYTES_PER_POINT = 12
+
+
+def point_count(record: bytes) -> int:
+    """Points in a compiled simple-glyph record, read from the last
+    entry of endPtsOfContours. An empty record has none."""
+    if len(record) < 12:
+        return 0
+    contours = struct.unpack(">h", record[:2])[0]
+    if contours <= 0:
+        return 0
+    last = 10 + 2 * (contours - 1)
+    return struct.unpack(">H", record[last:last + 2])[0] + 1
+
+
+def check_decoded_budget(records: list[bytes], what: str) -> None:
+    points = sum(point_count(r) for r in records)
+    if points * BYTES_PER_POINT > DECODED_BUDGET:
+        raise SystemExit(
+            f"{what} decodes to {points} points "
+            f"({points * BYTES_PER_POINT} B), above the spec's 64 KiB "
+            "decoded-size budget; terminals reject it with "
+            "reason=outline_too_large."
+        )
 
 
 def extract(font: TTFont, cp: int) -> bytes:
@@ -68,6 +99,7 @@ def main() -> None:
     print()
     for cp, label in TARGETS:
         data = extract(font, cp)
+        check_decoded_budget([data], f"U+{cp:04X}")
         b64 = base64.b64encode(data).decode("ascii")
         print(f"// {label} (U+{cp:04X}) — {len(data)} bytes")
         print(f'"{b64}",')

@@ -24,20 +24,44 @@ var nerdGlyfsB64 = [5]string{
 	"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",
-	"AAEAAP/dA5sC+QAZAAATJjU1NDY2NhcWFhUVFAcBBiMiJ1ZWel09eCwWFSx4PV16Vv66FB0eFAEhUHULXpAQCiYsFhYsJgoQkF4LdVD+zxMT",
-	"AAoAAP/YAyEC+AENARcBWgFlAW8BfQGIAbsBxAHNAAAAMhYXFhYyNjc2MzIXFhcWFxY3NjMyFhcWFxY3NjMyFxcHBxcWNzYXFgcGFxYzMhcWBw4CFAcUFQcUFxYWFRQGFhcWFgcGFBcWFgYHBhQXFgYHDgIWFhcWBwYHBhUUFxcHBiInJgYHBiMiJyYHBgcGBiMiJyYiBwYiJyYmBwYGJyYmJyYHBiImJyYmBwYiJjc3JyYHBicmNzYmIwYmNzY2Nzc0JyYmNTQ3NiYnJiY3NjQnJiY0Njc2NjQnJicmJjY3NjYnJjc3Mjc2NScmJyYnJjYXMjY1NCYmJyc3NhcWNzcnJjYzMhcWNjc2NjMyFxY3Njc2NjMyFxYyNzY3FyIHBhYzMjYnJgczBwYHBhUUMzIXFhYHBgcOAhUGFQciFhcWFxYXFhcWFjc2NzY3NjMzNzYvAiYnJjU0Nzc3JicmJicnBwYGJyYnBwYGFxYyNzYmJyYFIgcGFBcWNicmBRcWBwYPAgYXFzM1NRcVMzY3NjU0JyYjBxUzMhcWFQcjIhUGFjMyNzYyFxYXFhUWFhcWNzY/AjY2Fxc2NjQjIiYnJicmJyYnJiMGIgcGFjMyNiclIgcGFjc2JyYBjQQICgcECAgIEQMJBgUCAwUGEBMDBgQEAwUDFBIFAwQEAQEEBRIZBQUGBQMCFxUFBwwBAgICARgSChoEFBcEExEUDwQECBATERMEGAoGCAQEBhEHAxUZCAsGAxcYBAUGChoVAgMBAQQEBhQSCgMECgQRFAUEBgcGBAUQEAgLDQwOCwoODQgFBg4CBRUPDAQEBAgTFAYIAQEEBREaBAYGBQQYGQYKAQQCARgSCg0NBBQXBBMQERIEBg4KCAIDCg0ECBEUBA0QBwQFEBcBAQICAgsIGRgCAgIBBAMFGhIFBAEBCAMFEhMIBAQEBgUREQQGCAcEBgQQDwoLCQQFCQcMDBARCg0HPgEPQjEfoJ8NJzACAykCBAQCAQEEAgIDGAgEAwggCg0BAQMCDBABAgIBHRsDBw4PAx8xFkQTCRQSEAkHEvoMDgcHGAgEBAcFAjAHBA0OFBQTBf3wBAsIAh0cAQMKBFOENjcIERsLLzEkJAECAXl5ARgBBBQZEAYEBQYBRCEnKiYSBgYGECAcARg/NhQLDgkLBQkQBimQEAQPChESCA4BVRAGCigLChEFAvgEEQsIBgkREA8FCAIBDA0KERYCAgkIBAQWFwIDBQYFBBkVAwIDBhkDBAQEAQEBAQcEAwQHBSQICAgMEREICwoFBggKDAgQEQwJBAQCCAgHGAYDAwQIAxAXBwMGFBkKBgQCAxYWBAQJCAQVHAwOAwQQEwYREBMVFBMCEA0GAgQmAgQPDAoSFgQJCQgXFgICBAYEBhgVBgEMFgQKAwMGBAQEBgQTEQgJCQwQEAgLCwQMBAkHBAoDAwkLDAgGCAgSFwcEAwQHAgIGBQQXDAEEBQEGCgQTBAcGBAICFxYICAkEFhEKDA0BARcSBBEPEw8ERQcKHiAKBScEESgaBAIDCjghJh4BBAIBAQEBBAECAhUjEQMJAgcIGBMBAQURFwcNDAMHCgYgIQY0IxAcBAETEwgDBBObARgMCwwIFAQEAgIIHAYKKAsDAwkYDQQNDRAjLg9eXgE4AQQHDhQHA4g0AgQqKwICGgUECAkVHAEHFAMDCAcKAx4iCgcGARwCBAwPJjAHDgQCwgMJIiIJAg0UFBIRDgQ=",
+	"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",
+}
+
+// The Nerd Font icons are drawn for the font's own cell: a 600 unit
+// advance, ascender 1020 and descender -300 at upm 1000. Declaring
+// that extent (§8.5.1) places every icon the way the patched font
+// would, and keeps the five in proportion to each other.
+const nerdExtent = "aw=600;lh=1320;ymin=-300"
+
+// Each letter of the colour demos is registered with the font's line
+// height and descender, plus its own advance. size=height scales by
+// line height alone, so every letter gets the same scale and they all
+// sit on one baseline; the advance centres each letter in its cell.
+func letterExtent(advance, lineHeight, ymin int) string {
+	return fmt.Sprintf("aw=%d;lh=%d;ymin=%d;size=height", advance, lineHeight, ymin)
 }
 
 func sendRegisterGlyf(w *uv.Terminal, cp rune, payload string) {
-	fmt.Fprintf(w, "\x1b_25a1;r;cp=%x;reply=0;upm=1000;%s\x1b\\", cp, payload)
+	fmt.Fprintf(w, "\x1b_25a1;r;cp=%x;reply=0;upm=1000;%s;%s\x1b\\", cp, nerdExtent, payload)
 }
 
-func sendRegisterColrv1(w *uv.Terminal, cp rune, payload string) {
-	fmt.Fprintf(w, "\x1b_25a1;r;cp=%x;fmt=colrv1;reply=2;upm=1000;%s\x1b\\", cp, payload)
+func sendRegisterColrv1(w *uv.Terminal, cp rune, extent, payload string) {
+	fmt.Fprintf(w, "\x1b_25a1;r;cp=%x;fmt=colrv1;reply=2;upm=1000;%s;%s\x1b\\", cp, extent, payload)
 }
 
-func sendRegisterColrv0(w *uv.Terminal, cp rune, upm uint32, payload string) {
-	fmt.Fprintf(w, "\x1b_25a1;r;cp=%x;fmt=colrv0;reply=2;upm=%d;%s\x1b\\", cp, upm, payload)
+// Offset for the width=2 duplicates of the Nabla letters: the same
+// colrv1 payloads re-registered at cp+nablaWideOffset (0x100020 to
+// 0x10002C, free between the Nabla and Zupra ranges) so the second
+// colrv1 line renders each letter across two cells.
+const nablaWideOffset rune = 0x10
+
+func sendRegisterColrv1Wide(w *uv.Terminal, cp rune, extent, payload string) {
+	fmt.Fprintf(w, "\x1b_25a1;r;cp=%x;fmt=colrv1;reply=2;upm=1000;%s;width=2;%s\x1b\\", cp, extent, payload)
+}
+
+func sendRegisterColrv0(w *uv.Terminal, cp rune, upm uint32, extent, payload string) {
+	fmt.Fprintf(w, "\x1b_25a1;r;cp=%x;fmt=colrv0;reply=2;upm=%d;%s;%s\x1b\\", cp, upm, extent, payload)
 }
 
 func registerGlyfSlots(w *uv.Terminal) {
@@ -49,14 +73,20 @@ func registerGlyfSlots(w *uv.Terminal) {
 
 func registerNabla(w *uv.Terminal) {
 	for _, e := range nablaLetters {
-		sendRegisterColrv1(w, e.Cp, e.Payload)
+		extent := letterExtent(e.Advance, nablaLineHeight, nablaYMin)
+		sendRegisterColrv1(w, e.Cp, extent, e.Payload)
+		w.Screen().Flush()
+		// Wide duplicate for the second colrv1 line: same payload at
+		// a fresh codepoint, drawn across two cells with width=2.
+		sendRegisterColrv1Wide(w, e.Cp+nablaWideOffset, extent, e.Payload)
 		w.Screen().Flush()
 	}
 }
 
 func registerZupra(w *uv.Terminal) {
 	for _, e := range zupraLetters {
-		sendRegisterColrv0(w, e.Cp, zupraUpm, e.Payload)
+		extent := letterExtent(e.Advance, zupraLineHeight, zupraYMin)
+		sendRegisterColrv0(w, e.Cp, zupraUpm, extent, e.Payload)
 		w.Screen().Flush()
 	}
 }
@@ -72,6 +102,32 @@ func nablaRenderedText() string {
 			}
 		}
 		b.WriteRune(mapped)
+	}
+	return b.String()
+}
+
+// Same text through the width=2 duplicates. A width=2 glyph overflows
+// into the following cell in *pixels*; the terminal does not reserve
+// that cell, so the codepoint still counts as one logical column
+// (== system wcwidth → no cursor/copy desync). We author an explicit
+// trailing space after each glyph for the overflow to land on, which
+// also makes the row read as a sequence of two-cell glyphs.
+func nablaWideRenderedText() string {
+	var b strings.Builder
+	for _, ch := range nablaText {
+		mapped := rune(-1)
+		for _, e := range nablaLetters {
+			if e.Letter == ch {
+				mapped = e.Cp + nablaWideOffset
+				break
+			}
+		}
+		if mapped >= 0 {
+			b.WriteRune(mapped)
+			b.WriteRune(' ')
+		} else {
+			b.WriteRune(ch)
+		}
 	}
 	return b.String()
 }
@@ -216,6 +272,7 @@ func run(t *uv.Terminal, hasGlyf, hasColrv0, hasColrv1 bool) error {
 	}
 
 	nablaLine := nablaRenderedText()
+	nablaWideLine := nablaWideRenderedText()
 	zupraLine := zupraRenderedText()
 	glyfLine := glyfIcons()
 
@@ -270,7 +327,8 @@ func run(t *uv.Terminal, hasGlyf, hasColrv0, hasColrv1 bool) error {
 		}
 
 		drawLine("colrv1: ", nablaLine, "(not supported)", hasColrv1, nablaBg)
-		drawLine("colrv1: ", nablaLine, "(not supported)", hasColrv1, nil)
+		// Second line: the same letters via the width=2 duplicates.
+		drawLine("colrv1: ", nablaWideLine, "(not supported)", hasColrv1, nil)
 		drawLine("colrv0: ", zupraLine, "(not supported)", hasColrv0, nil)
 		drawLine("glyf:   ", glyfLine, "(not supported)", hasGlyf, nil)
 

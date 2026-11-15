@@ -4,8 +4,7 @@ Small demos that exercise [Glyph Protocol][blog]'s three payload
 formats across Rust, Go, TypeScript, and Jam — plus an
 [ultraviolet](./ultraviolet) full-screen TUI variant in Go.
 
-Each demo probes the terminal for `fmt` support, then prints four
-lines:
+Each demo probes the terminal for `fmt` support, then prints:
 
 - `colrv1 example` (twice, once over a blue background block): the
   string **"Rio Terminal Emulator"** rendered from `fmt=colrv1`
@@ -19,6 +18,32 @@ lines:
   `U+100000`–`U+100004` as `fmt=glyf` payloads, extracted from
   `JetBrainsMono Nerd Font` so the icons look like Nerd Fonts even
   without a Nerd Font installed.
+- `glyf wide ex.`: the same five outlines re-registered with
+  `width=2`, so each icon is drawn across two cells. The codepoint
+  still takes one column (its normal wcwidth), so cursor movement,
+  wrapping and selection don't change; the demo prints a space after
+  each icon for the second cell.
+- `placement …` (three rows): the heart outline registered nine times
+  with different [§8.5 sizing/placement][spec] parameters — four of
+  the `size=` modes (`height`/`contain`/`cover`/`stretch`), corner and
+  baseline `align=`, fractional `pad=` insets, and a two-cell
+  `width=2;size=contain` combo. Each glyph prints over a grey
+  background block so the cell box (and where the §8.5 transform put
+  the outline inside it) is visible.
+
+Every registration except the single emoji declares its authored
+extent (`aw`, `lh`, `ymin`, spec §8.5.1), so the terminal places it
+from the font's metrics instead of the outline's own bounds:
+
+- The Nerd Font icons use the font's cell, `aw=600;lh=1320;ymin=-300`,
+  which puts them exactly where the patched font would and keeps the
+  five in proportion to each other.
+- Each Nabla and Zupra letter uses its own advance plus the font's
+  line height and descender, with `size=height`. Every letter gets the
+  same scale and they share one baseline.
+- The placement rows use a square em around the heart,
+  `aw=1000;lh=1000;ymin=-120`. A cell is taller than it is wide, so
+  that's where the size modes visibly differ.
 
 Format support is negotiated per-session via the protocol's `s` verb.
 Missing formats degrade to a labelled fallback line (e.g. `(colrv0
@@ -71,12 +96,21 @@ python3 extract_glyphs.py /path/to/font.ttf  # edit TARGETS to pick codepoints
 ```
 
 Composite glyphs are flattened via `fontTools.pens.ttGlyphPen`,
-hinting is stripped, output is base64 ready to paste.
+hinting is stripped, output is base64 ready to paste. All three
+scripts refuse an outline (or a colour container's outlines together)
+that decodes to more than 64 KiB, the budget terminals enforce with
+`reason=outline_too_large`.
+
+When you register what you extracted, send the extent from the
+font's metrics too: `aw` from `hmtx`, and `lh`/`ymin` from the
+`hhea` ascender and descender. Without it the terminal sizes each
+glyph from its own outline, so a set of icons or letters stops
+lining up.
 
 **Colour (`fmt=colrv1`).** Pull a full COLR v1 paint graph for a
 single codepoint from a colour font. The script auto-subsets the
 font to the minimal set of glyphs the paint graph touches, so the
-container fits in the 256-glyph / 64 KiB per-payload cap:
+container fits in the 1024-glyph / 64 KiB per-payload cap:
 
 ```bash
 python3 extract_colrv1.py fonts/Nabla.ttf 52  # letter "R"
@@ -108,6 +142,10 @@ python3 build_zupra_using.py --lang go     > bubbletea/zupra_using.go
 python3 build_zupra_using.py --lang ts     > ink/source/zupra_using.ts
 ```
 
+The ultraviolet demo uses copies of the Go modules
+(`ultraviolet/nabla_rio.go`, `ultraviolet/zupra_using.go`); run the
+`--lang go` commands into those paths too.
+
 Re-run whichever ones you care about after swapping fonts or demo
 strings.
 
@@ -132,6 +170,7 @@ Code: MIT, same as Rio. Nabla: [SIL Open Font License 1.1](fonts/OFL.txt).
 
 [blog]: https://rapha.land/introducing-glyph-protocol-for-terminals/
 [rio]: https://raphamorim.io/rio
+[spec]: https://github.com/raphamorim/rio/blob/main/specs/glyph-protocol.md
 [uv]: https://github.com/charmbracelet/ultraviolet
 [nabla]: https://fonts.google.com/specimen/Nabla?preview.script=Latn
 [nanoemoji-fonts]: https://github.com/googlefonts/nanoemoji/tree/main/tests/fonts
