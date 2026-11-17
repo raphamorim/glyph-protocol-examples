@@ -78,6 +78,52 @@ plain-CLI print. If you want to port the protocol to another language,
 the wire helpers at the top of each entry file are the whole story
 (APC sequence construction + base64 payloads).
 
+## SVG icons (`fmt=path`, proposal)
+
+[`svg/`](./svg) tries `fmt=path`, a proposed payload that carries SVG
+path data as plain text instead of a base64 font outline. It isn't in
+the spec yet; [raphamorim/rio#2095][path-pr] implements it in Rio, with
+the draft spec in its description.
+
+```bash
+python3 svg/demo.py
+```
+
+It asks the terminal for `fmt` support and, when `path` is listed,
+registers icons from seven sets and prints:
+
+- `stroked`: Lucide and Tabler line icons (round strokes, 2 units wide).
+- `filled`: Heroicons, Octicons, Bootstrap Icons and Material Symbols
+  (Material's viewBox is `0 -960 960 960`).
+- `duotone`: Phosphor duotone, a 20% foreground layer under the icon.
+- `two colour`: three glyphs drawn for the demo that mix fixed colours
+  with the foreground.
+- `follows fg`: one registration printed in six SGR colours.
+- `width=2` and `size=`: the §8.5 keys, which place the viewBox the way
+  they place a `glyf` extent.
+
+Without `path` it prints which formats the terminal has and stops.
+
+[`svg/svg2glyph.py`](svg/svg2glyph.py) is the converter the demo uses,
+standard library only. It turns an icon SVG into a registration:
+
+```bash
+python3 svg/svg2glyph.py svg/icons/lucide/folder.svg              # print the APC
+python3 svg/svg2glyph.py svg/icons/lucide/folder.svg --cp 100005  # another codepoint
+python3 svg/svg2glyph.py svg/icons/lucide/folder.svg --payload    # vb and payload only
+```
+
+It handles what icon sets ship: paths and basic shapes inside groups,
+fills and round strokes, `currentColor` as the foreground, opacity as
+alpha. It refuses what the format can't carry (transforms, `<use>`,
+clipping, masks, gradients, butt or square caps, miter joins) with a
+message instead of drawing something different.
+
+The icons in [`svg/icons`](svg/icons) are unmodified copies from each
+set, with its licence next to them: Lucide (ISC), Heroicons, Octicons,
+Bootstrap Icons, Phosphor and Tabler (MIT), Material Symbols
+(Apache-2.0).
+
 ## Extracting your own glyphs
 
 The demo payloads come from one-off extraction scripts. All three
@@ -167,6 +213,8 @@ strings.
 ## License
 
 Code: MIT, same as Rio. Nabla: [SIL Open Font License 1.1](fonts/OFL.txt).
+The icons under `svg/icons` keep their own licences, in each set's
+directory.
 
 [blog]: https://rapha.land/introducing-glyph-protocol-for-terminals/
 [rio]: https://raphamorim.io/rio
@@ -175,3 +223,4 @@ Code: MIT, same as Rio. Nabla: [SIL Open Font License 1.1](fonts/OFL.txt).
 [nabla]: https://fonts.google.com/specimen/Nabla?preview.script=Latn
 [nanoemoji-fonts]: https://github.com/googlefonts/nanoemoji/tree/main/tests/fonts
 [zupra]: https://www.dafont.com/zupra-3d-eye-fs.font
+[path-pr]: https://github.com/raphamorim/rio/pull/2095
