@@ -1,7 +1,8 @@
 # glyph-protocol-examples
 
-Small demos that exercise [Glyph Protocol][blog]'s three payload
-formats across Rust, Go, TypeScript, and Jam — plus an
+Small demos that exercise [Glyph Protocol][blog]'s payload formats
+(`glyf`, `colrv0`, `colrv1`, and the proposed `vg`) across Rust, Go,
+TypeScript, and Jam — plus an
 [ultraviolet](./ultraviolet) full-screen TUI variant in Go.
 
 Each demo probes the terminal for `fmt` support, then prints:
@@ -30,6 +31,12 @@ Each demo probes the terminal for `fmt` support, then prints:
   `width=2;size=contain` combo. Each glyph prints over a grey
   background block so the cell box (and where the §8.5 transform put
   the outline inside it) is visible.
+- `vg …` (four rows; ratatui, bubbletea and ink): the proposed
+  [`fmt=vg`](#svg-icons-gradients-and-emoji-fmtvg-proposal), SVG path
+  data and paint sent as text. Six icons; gradients, clips and a
+  butt/miter stroke; then Noto emoji (gradients) and Twemoji emoji, each
+  two cells wide. A terminal without `vg` gets
+  `(vg not advertised by terminal)`.
 
 Every registration except the single emoji declares its authored
 extent (`aw`, `lh`, `ymin`, spec §8.5.1), so the terminal places it
@@ -69,7 +76,8 @@ posts:
 | [ultraviolet](./ultraviolet) | Go | `cd ultraviolet && go run .` |
 
 The first four share the same wire behaviour, printed layout, and
-payload constants — only the language differs. The `ratatui` /
+payload constants — only the language differs, except that
+`ncurses-jam` doesn't print the `vg` rows yet. The `ratatui` /
 `bubbletea` / `ink` directory names are historical: those demos no
 longer use the framework they're named after, since the point is the
 protocol, not the TUI. The exception is `ultraviolet`, which *does*
@@ -78,7 +86,7 @@ plain-CLI print. If you want to port the protocol to another language,
 the wire helpers at the top of each entry file are the whole story
 (APC sequence construction + base64 payloads).
 
-## SVG icons and gradients (`fmt=vg`, proposal)
+## SVG icons, gradients and emoji (`fmt=vg`, proposal)
 
 [`svg/`](./svg) tries `fmt=vg`, a proposed payload that carries SVG's
 path data and paint model as plain text instead of a base64 font
@@ -91,8 +99,9 @@ it in Rio, with the draft spec in its description.
 python3 svg/demo.py
 ```
 
-It asks the terminal for `fmt` support and, when `vg` is listed,
-registers icons from seven sets and prints:
+The ratatui, bubbletea and ink demos print a few `vg` rows next to the
+other formats; this one shows all of it. It asks the terminal for `fmt`
+support and, when `vg` is listed, prints:
 
 - `stroked`: Lucide and Tabler line icons (round strokes, 2 units wide).
 - `filled`: Heroicons, Octicons, Bootstrap Icons and Material Symbols
@@ -102,10 +111,14 @@ registers icons from seven sets and prints:
   with the foreground.
 - `gradients`: a radial gradient with a focal point, a folder that fades
   out (a gradient of the foreground alone, so it still follows the text
-  colour), and a gradient on a stroke.
+  colour), and a gradient on a stroke. Two cells wide, like the rows
+  below, so the details show.
 - `clips`: stripes clipped to a circle, and half of a radial gradient.
 - `strokes`: the same zigzag with round caps and joins, butt and miter,
   and square and bevel.
+- `Noto`, `Twemoji`, `Fluent`, `OpenMoji`: 😀 😎 ❤️ 🚀 🎉 🔥 🍕 🐱 from each
+  set. Noto's use gradients; OpenMoji's outlines are butt and miter
+  strokes.
 - `follows fg`: one registration printed in six SGR colours.
 - `width=2` and `size=`: the §8.5 keys, which place the viewBox the way
   they place a `glyf` extent.
@@ -127,9 +140,24 @@ foreground, opacity as alpha. It refuses transforms, `<use>`, clipping,
 masks, gradients and dashes with a message instead of drawing something
 different. The format has gradients and clips, but getting them out of
 an arbitrary SVG means resolving CSS, transforms and gradient units,
-which needs a full SVG library (usvg, for one); emoji sets need that,
-icon sets don't. The gradients and clips in the demo are written by
-hand.
+which needs a full SVG library; emoji sets need that, icon sets don't.
+The gradients and clips in the demo are written by hand.
+
+For emoji, [`svg/usvg2vg`](svg/usvg2vg) is a small Rust converter built
+on [usvg](https://github.com/linebender/resvg), which resolves all of
+that. It writes the viewBox and the payload, and refuses what the format
+can't carry (filters, masks, patterns, images, text, dashes, blend
+modes, nested clips):
+
+```bash
+cd svg/usvg2vg
+cargo run --release -- ../emoji/noto/rocket.svg                  # print vb and payload
+cargo run --release -- ../emoji/noto/rocket.svg -o rocket.vg     # write them to a file
+```
+
+The emoji in [`svg/emoji`](svg/emoji) are converted with it; see
+[`svg/emoji/README.md`](svg/emoji/README.md) for their sources and
+licences.
 
 The icons in [`svg/icons`](svg/icons) are unmodified copies from each
 set, with its licence next to them: Lucide (ISC), Heroicons, Octicons,
@@ -198,7 +226,15 @@ python3 build_nabla_rio.py --lang ts       > ink/source/nabla_rio.ts
 python3 build_zupra_using.py               > ratatui/src/zupra_using.rs
 python3 build_zupra_using.py --lang go     > bubbletea/zupra_using.go
 python3 build_zupra_using.py --lang ts     > ink/source/zupra_using.ts
+
+python3 build_vg.py                        > ratatui/src/vg.rs
+python3 build_vg.py --lang go              > bubbletea/vg.go
+python3 build_vg.py --lang ts              > ink/source/vg.ts
 ```
+
+`build_vg.py` needs no virtualenv: it reads the icons through
+`svg/svg2glyph.py`, the hand-drawn glyphs from `svg/demo.py` and the
+converted emoji from `svg/emoji/`.
 
 The ultraviolet demo uses copies of the Go modules
 (`ultraviolet/nabla_rio.go`, `ultraviolet/zupra_using.go`); run the
@@ -225,8 +261,11 @@ strings.
 ## License
 
 Code: MIT, same as Rio. Nabla: [SIL Open Font License 1.1](fonts/OFL.txt).
-The icons under `svg/icons` keep their own licences, in each set's
-directory.
+The icons under `svg/icons` and the emoji under `svg/emoji` keep their
+own licences, in each set's directory (see
+[`svg/emoji/README.md`](svg/emoji/README.md)); the `vg` modules
+generated from them (`ratatui/src/vg.rs`, `bubbletea/vg.go`,
+`ink/source/vg.ts`) carry the same terms.
 
 [blog]: https://rapha.land/introducing-glyph-protocol-for-terminals/
 [rio]: https://raphamorim.io/rio

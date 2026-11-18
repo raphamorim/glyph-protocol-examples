@@ -4,9 +4,9 @@
     python3 svg/demo.py
 
 Probes the terminal with `s`, and if it lists `vg` in `fmt`, registers
-icons from seven icon sets plus glyphs drawn for the demo (fixed
-colours, gradients, clips, stroke styles) and prints them. Standard
-library only; needs a Unix tty.
+icons from seven icon sets, glyphs drawn for the demo (fixed colours,
+gradients, clips, stroke styles) and emoji from four sets, and prints
+them. Standard library only; needs a Unix tty.
 """
 
 import os
@@ -20,6 +20,11 @@ from svg2glyph import convert, registration  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ICONS = os.path.join(HERE, "icons")
+EMOJI = os.path.join(HERE, "emoji")
+EMOJI_SETS = [("Noto", "noto"), ("Twemoji", "twemoji"), ("Fluent", "fluent"),
+              ("OpenMoji", "openmoji")]
+EMOJI_NAMES = ["grinning", "sunglasses", "heart", "rocket", "party", "fire",
+               "pizza", "cat"]
 
 ROWS = [
     ("stroked", [
@@ -135,12 +140,22 @@ def main():
         glyphs = [register(*convert(os.path.join(ICONS, f))) for f in files]
         lines.append(f"{label:<12}" + " ".join(glyphs))
 
-    for label, payloads in (("two colour", TWO_COLOUR), ("gradients", GRADIENTS),
-                            ("clips", CLIPS)):
-        glyphs = [register("0,0,24,24", p) for p in payloads]
-        lines.append(f"{label:<12}" + " ".join(glyphs))
-    glyphs = [register("0,0,24,24", p) for p in STROKES]
-    lines.append(f"{'strokes':<12}" + " ".join(glyphs) + "   round, butt/miter, square/bevel")
+    glyphs = [register("0,0,24,24", p) for p in TWO_COLOUR]
+    lines.append(f"{'two colour':<12}" + " ".join(glyphs))
+    # Two cells wide from here on, so gradients and stroke ends show.
+    # Each glyph takes one column; the space after it is the second cell.
+    for label, payloads in (("gradients", GRADIENTS), ("clips", CLIPS)):
+        glyphs = [register("0,0,24,24", p, "width=2") for p in payloads]
+        lines.append(f"{label:<12}" + "  ".join(glyphs))
+    glyphs = [register("0,0,24,24", p, "width=2") for p in STROKES]
+    lines.append(f"{'strokes':<12}" + "  ".join(glyphs) + "   round, butt/miter, square/bevel")
+    for label, folder in EMOJI_SETS:
+        glyphs = []
+        for name in EMOJI_NAMES:
+            with open(os.path.join(EMOJI, folder, name + ".vg")) as f:
+                vb, payload = f.read().split("\n")[:2]
+            glyphs.append(register(vb, payload, "width=2"))
+        lines.append(f"{label:<12}" + "  ".join(glyphs))
 
     folder = register(*convert(os.path.join(ICONS, "lucide/folder.svg")))
     lines.append(f"{'follows fg':<12}"

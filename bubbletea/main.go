@@ -1,10 +1,12 @@
-// Glyph Protocol demo — sample output exercising the protocol's three
-// payload formats:
+// Glyph Protocol demo — sample output exercising the protocol's payload
+// formats:
 //
 //	colrv1 : "Rio Terminal Emulator" rendered via Typearture's Nabla.
 //	colrv0 : "Using Glyph protocol" rendered via Zupra 3D eYe/FS.
 //	glyf   : five Nerd Font outlines (branch / folder / home / heart /
 //	         Rust cog) registered at consecutive PUA-B codepoints.
+//	vg     : SVG path data and paint as text (proposed, raphamorim/rio#2095):
+//	         icons, gradients, clips, and Noto and Twemoji emoji.
 //
 // The demo is deliberately non-TUI: it probes the protocol, sends the
 // registrations, prints the lines in cooked mode, and exits.
@@ -342,6 +344,27 @@ func glyfIcons() string {
 	return strings.Join(parts, "")
 }
 
+// registerVg sends fmt=vg glyphs. The payload is text, not base64.
+func registerVg(w io.Writer, glyphs []vgGlyph) {
+	for _, g := range glyphs {
+		extra := ""
+		if g.extra != "" {
+			extra = ";" + g.extra
+		}
+		fmt.Fprintf(w, "\x1b_25a1;r;cp=%x;fmt=vg;reply=0;vb=%s%s;%s\x1b\\",
+			g.cp, g.vb, extra, g.payload)
+	}
+}
+
+// vgLine joins glyphs with two spaces; a width=2 glyph takes the first.
+func vgLine(glyphs []vgGlyph) string {
+	parts := make([]string, 0, len(glyphs))
+	for _, g := range glyphs {
+		parts = append(parts, string(rune(g.cp)))
+	}
+	return strings.Join(parts, "  ")
+}
+
 func glyfWideIcons() string {
 	// Two spaces between icons: a width=2 glyph overflows into the first
 	// (blank) space in pixels — the cell is never reserved, so the
@@ -462,6 +485,7 @@ func main() {
 	hasGlyf := slices.Contains(fmts, "glyf")
 	hasColrv0 := slices.Contains(fmts, "colrv0")
 	hasColrv1 := slices.Contains(fmts, "colrv1")
+	hasVg := slices.Contains(fmts, "vg")
 
 	if hasGlyf {
 		registerGlyfSlots(os.Stdout)
@@ -473,6 +497,11 @@ func main() {
 	if hasColrv1 {
 		registerNabla(os.Stdout)
 		registerNotoFruit(os.Stdout)
+	}
+	if hasVg {
+		for _, group := range [][]vgGlyph{vgIcons, vgPaints, vgEmojiNoto, vgEmojiTwemoji} {
+			registerVg(os.Stdout, group)
+		}
 	}
 	flush(os.Stdout)
 
@@ -510,6 +539,14 @@ func main() {
 	fmt.Printf("colrv0 example: %s\n", colrv0Emoji)
 	fmt.Printf("glyf examples:  %s\n", glyfLine)
 	fmt.Printf("glyf wide ex.:  %s\n", glyfWideLine)
+	if hasVg {
+		fmt.Printf("vg icons:       %s\n", vgLine(vgIcons))
+		fmt.Printf("vg paints:      %s\n", vgLine(vgPaints))
+		fmt.Printf("vg emoji:       %s\n", vgLine(vgEmojiNoto))
+		fmt.Printf("vg emoji:       %s\n", vgLine(vgEmojiTwemoji))
+	} else {
+		fmt.Println("vg examples:    (vg not advertised by terminal)")
+	}
 
 	// §8.5 sizing/placement — the same heart outline under different
 	// size= / align= / pad= / width= parameters. The grey block is the

@@ -1,10 +1,12 @@
 #!/usr/bin/env node
-// Glyph Protocol demo — sample output exercising the protocol's three
-// payload formats:
+// Glyph Protocol demo — sample output exercising the protocol's payload
+// formats:
 //   colrv1 : "Rio Terminal Emulator" rendered via Typearture's Nabla.
 //   colrv0 : "Using Glyph protocol" rendered via Zupra 3D eYe/FS.
 //   glyf   : five Nerd Font outlines (branch / folder / home / heart /
 //            Rust cog) registered at consecutive PUA-B codepoints.
+//   vg     : SVG path data and paint as text (proposed, raphamorim/rio#2095):
+//            icons, gradients, clips, and Noto and Twemoji emoji.
 //
 // The demo is deliberately non-TUI: it probes the protocol, sends the
 // registrations, prints the lines in cooked mode, and exits.
@@ -24,6 +26,13 @@ import {
 } from './zupra_using.js';
 import {twemojiLetters, twemojiText, twemojiUpm} from './twemoji.js';
 import {notoFruitLetters, notoFruitText} from './noto_fruit.js';
+import {
+	VG_EMOJI_NOTO,
+	VG_EMOJI_TWEMOJI,
+	VG_ICONS,
+	VG_PAINTS,
+	type VgGlyph,
+} from './vg.js';
 
 // glyf slots — five Nerd Font outlines at contiguous PUA-B codepoints.
 const slotCps: ReadonlyArray<number> = [
@@ -260,6 +269,21 @@ function glyfIcons(): string {
 	return slotCps.map(cp => String.fromCodePoint(cp)).join('  ');
 }
 
+// registerVg sends fmt=vg glyphs. The payload is text, not base64.
+function registerVg(glyphs: readonly VgGlyph[]): void {
+	for (const g of glyphs) {
+		const extra = g.extra === '' ? '' : `;${g.extra}`;
+		process.stdout.write(
+			`\x1b_25a1;r;cp=${g.cp.toString(16)};fmt=vg;reply=0;vb=${g.vb}${extra};${g.payload}\x1b\\`,
+		);
+	}
+}
+
+// vgLine joins glyphs with two spaces; a width=2 glyph takes the first.
+function vgLine(glyphs: readonly VgGlyph[]): string {
+	return glyphs.map(g => String.fromCodePoint(g.cp)).join('  ');
+}
+
 function glyfWideIcons(): string {
 	return wideSlotCps.map(cp => String.fromCodePoint(cp)).join('  ');
 }
@@ -347,6 +371,7 @@ if (fmts === undefined) {
 const hasGlyf = fmts.includes('glyf');
 const hasColrv0 = fmts.includes('colrv0');
 const hasColrv1 = fmts.includes('colrv1');
+const hasVg = fmts.includes('vg');
 
 if (hasGlyf) registerGlyfSlots();
 if (hasColrv0) {
@@ -356,6 +381,11 @@ if (hasColrv0) {
 if (hasColrv1) {
 	registerNabla();
 	registerNotoFruit();
+}
+if (hasVg) {
+	for (const group of [VG_ICONS, VG_PAINTS, VG_EMOJI_NOTO, VG_EMOJI_TWEMOJI]) {
+		registerVg(group);
+	}
 }
 
 const colrv1Line = hasColrv1
@@ -389,6 +419,14 @@ process.stdout.write(`colrv0 example: ${colrv0Line}\n`);
 process.stdout.write(`colrv0 example: ${colrv0Emoji}\n`);
 process.stdout.write(`glyf examples:  ${glyfLine}\n`);
 process.stdout.write(`glyf wide ex.:  ${glyfWideLine}\n`);
+if (hasVg) {
+	process.stdout.write(`vg icons:       ${vgLine(VG_ICONS)}\n`);
+	process.stdout.write(`vg paints:      ${vgLine(VG_PAINTS)}\n`);
+	process.stdout.write(`vg emoji:       ${vgLine(VG_EMOJI_NOTO)}\n`);
+	process.stdout.write(`vg emoji:       ${vgLine(VG_EMOJI_TWEMOJI)}\n`);
+} else {
+	process.stdout.write('vg examples:    (vg not advertised by terminal)\n');
+}
 
 // §8.5 sizing/placement — the same heart outline under different
 // size= / align= / pad= / width= parameters. The grey block is the

@@ -1,0 +1,11 @@
+[package]
+name = "usvg2vg"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Convert an SVG (emoji included) into a Glyph Protocol fmt=vg payload"
+
+[dependencies]
+usvg = { version = "=0.49.0", default-features = false }
+
+[workspace]

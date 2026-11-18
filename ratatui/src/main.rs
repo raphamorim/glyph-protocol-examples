@@ -1,9 +1,11 @@
-// Glyph Protocol demo — sample output exercising the protocol's three
-// payload formats:
+// Glyph Protocol demo — sample output exercising the protocol's payload
+// formats:
 //   colrv1 : "Rio Terminal Emulator" rendered via Typearture's Nabla.
 //   colrv0 : "Using Glyph protocol" rendered via Zupra 3D eYe/FS.
 //   glyf   : five Nerd Font outlines (branch / folder / home / heart /
 //            Rust cog) registered at consecutive PUA-B codepoints.
+//   vg     : SVG path data and paint as text (proposed, raphamorim/rio#2095):
+//            icons, gradients, clips, and Noto and Twemoji emoji.
 //
 // The demo is deliberately non-TUI: it probes the protocol, sends the
 // registrations, prints the lines in cooked mode, and exits.
@@ -11,6 +13,7 @@
 mod colorv2;
 mod noto_fruit;
 mod twemoji;
+mod vg;
 mod zupra_using;
 
 use std::io::{self, Write};
@@ -360,6 +363,32 @@ fn twemoji_text() -> String {
         .collect()
 }
 
+/// `fmt=vg` is text, not base64: the payload follows `vb` as is.
+fn register_vg(out: &mut impl Write, glyphs: &[vg::VgGlyph]) -> io::Result<()> {
+    for g in glyphs {
+        let extra = if g.extra.is_empty() {
+            String::new()
+        } else {
+            format!(";{}", g.extra)
+        };
+        write!(
+            out,
+            "\x1b_25a1;r;cp={:x};fmt=vg;reply=0;vb={}{};{}\x1b\\",
+            g.cp, g.vb, extra, g.payload
+        )?;
+    }
+    Ok(())
+}
+
+/// Glyphs separated by two spaces; a `width=2` glyph takes the first.
+fn vg_line(glyphs: &[vg::VgGlyph]) -> String {
+    glyphs
+        .iter()
+        .map(|g| char::from_u32(g.cp).unwrap().to_string())
+        .collect::<Vec<_>>()
+        .join("  ")
+}
+
 fn noto_fruit_text() -> String {
     noto_fruit::TEXT
         .chars()
@@ -511,6 +540,7 @@ fn main() -> io::Result<()> {
     let has_glyf = fmts.iter().any(|n| n == "glyf");
     let has_colrv0 = fmts.iter().any(|n| n == "colrv0");
     let has_colrv1 = fmts.iter().any(|n| n == "colrv1");
+    let has_vg = fmts.iter().any(|n| n == "vg");
 
     let mut stdout = io::stdout();
     if has_glyf {
@@ -523,6 +553,11 @@ fn main() -> io::Result<()> {
     if has_colrv1 {
         register_nabla(&mut stdout)?;
         register_noto_fruit(&mut stdout)?;
+    }
+    if has_vg {
+        for group in [vg::ICONS, vg::PAINTS, vg::EMOJI_NOTO, vg::EMOJI_TWEMOJI] {
+            register_vg(&mut stdout, group)?;
+        }
     }
     stdout.flush()?;
 
@@ -572,6 +607,14 @@ fn main() -> io::Result<()> {
     println!("colrv0 example: {}", colrv0_emoji);
     println!("glyf examples:  {}", glyf_line);
     println!("glyf wide ex.:  {}", glyf_wide_line);
+    if has_vg {
+        println!("vg icons:       {}", vg_line(vg::ICONS));
+        println!("vg paints:      {}", vg_line(vg::PAINTS));
+        println!("vg emoji:       {}", vg_line(vg::EMOJI_NOTO));
+        println!("vg emoji:       {}", vg_line(vg::EMOJI_TWEMOJI));
+    } else {
+        println!("vg examples:    (vg not advertised by terminal)");
+    }
 
     // §8.5 sizing/placement — the same heart outline under different
     // size= / align= / pad= / width= parameters. The grey block is the
