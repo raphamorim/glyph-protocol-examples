@@ -16,8 +16,8 @@
 // ncurses is used only for the probe. The protocol negotiates support
 // with the `s` verb, and reading the terminal's reply needs raw,
 // no-echo input — exactly what ncurses' cbreak/noecho/getch give us
-// (the same toolkit tetris.jam uses). We enter curses, ask, read the
-// reply with a short timeout, then endwin() back to the normal screen
+// (the same toolkit tetris.jam uses). We enter curses, send `s` then
+// DA1 (spec §3.4), read until the DA1 reply, then endwin() back to the normal screen
 // so the registrations and the printed glyph lines land in the usual
 // terminal flow / scrollback rather than a wiped alternate screen.
 
@@ -46,6 +46,30 @@ fn puts(s: []u8) {
 
 fn eputs(s: []u8) {
     write(2, s.ptr, s.len);
+}
+
+// Where `needle` starts in buf[0..len), or -1.
+fn findSub(buf: *const[] u8, len: u32, needle: []u8) i32 {
+    if (needle.len > len) {
+        return -1;
+    }
+    var i: u32 = 0;
+    while (i + (needle.len as u32) <= len) {
+        var j: u32 = 0;
+        var hit: bool = true;
+        while (j < (needle.len as u32)) {
+            if (buf[i + j] != needle.ptr[j]) {
+                hit = false;
+                break;
+            }
+            j = j + 1;
+        }
+        if (hit) {
+            return i as i32;
+        }
+        i = i + 1;
+    }
+    return -1;
 }
 
 // Does buf[0..len) contain `needle` as a byte substring?
@@ -94,15 +118,19 @@ fn main() {
     nodelay(win, 1);
     curs_set(0);
 
-    var probe: []u8 = "\x1b_25a1;s\x1b\\";
+    // `s` then DA1: terminals answer in order and nearly all answer
+    // DA1, so its reply settles whether an `s` reply came first.
+    var probe: []u8 = "\x1b_25a1;s\x1b\\\x1b[c";
     write(1, probe.ptr, probe.len);
 
     var buf: [512]u8 = [0; 512];
     var len: u32 = 0;
     var elapsed: i32 = 0;
     var done: bool = false;
-    // Collect until the APC string-terminator (ESC `\`) or ~250ms.
-    while (elapsed < 250) {
+    var csi: []u8 = "\x1b[?";
+    // Collect until the DA1 reply (CSI ? ... c) ends. The 2s bound only
+    // guards against a terminal that answers neither.
+    while (elapsed < 2000) {
         if (done) {
             break;
         }
@@ -115,11 +143,11 @@ fn main() {
                 buf[len] = c as u8;
                 len = len + 1;
             }
-            if (len >= 2) {
-                if (buf[len - 1] == 92) {
-                    if (buf[len - 2] == 27) {
-                        done = true;
-                    }
+            // A `c` ends DA1 once its CSI ? has started; before that a
+            // `c` is part of the `s` reply (colrv0).
+            if (c == 99) {
+                if (containsSub(&buf[0], len, csi)) {
+                    done = true;
                 }
             }
         }
@@ -127,10 +155,19 @@ fn main() {
 
     endwin();
 
-    // A well-formed reply carries a `fmt=` field. No field (timeout or a
-    // non-conformant terminal) means the protocol isn't implemented.
+    // Only what came before DA1 can be the `s` reply. No `fmt=` there
+    // means the protocol isn't implemented.
+    var da1: i32 = findSub(&buf[0], len, csi);
+    if (done) {
+        if (da1 >= 0) {
+            len = da1 as u32;
+        }
+    }
     var fmtKey: []u8 = "fmt=";
-    var ok: bool = containsSub(&buf[0], len, fmtKey);
+    var ok: bool = done;
+    if (ok) {
+        ok = containsSub(&buf[0], len, fmtKey);
+    }
     if (!ok) {
         var msg: []u8 = "This terminal does not implement Glyph Protocol. Run in Rio or another conformant terminal to see the demo.\n";
         eputs(msg);

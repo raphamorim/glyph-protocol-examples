@@ -91,21 +91,30 @@ GREY_BG = "\x1b[48;5;240m"
 RESET = "\x1b[0m"
 
 
-def probe_formats(timeout=1.0):
-    """Send `s` and return the advertised `fmt` list, or None."""
+def probe_formats(timeout=2.0):
+    """Send `s` then DA1 (spec §3.4) and read until the DA1 reply.
+
+    Returns the `fmt` list from an `s` reply before it, or None when
+    there was none: the terminal doesn't implement Glyph Protocol.
+    `timeout` only guards against a terminal that answers neither.
+    """
     fd = sys.stdin.fileno()
     if not os.isatty(fd):
         return None
     saved = termios.tcgetattr(fd)
     try:
         tty.setcbreak(fd)
-        sys.stdout.write("\x1b_25a1;s\x1b\\")
+        sys.stdout.write("\x1b_25a1;s\x1b\\\x1b[c")
         sys.stdout.flush()
         reply = b""
-        while not reply.endswith(b"\x1b\\"):
+        while True:
+            da1 = reply.find(b"\x1b[?")
+            if da1 >= 0 and b"c" in reply[da1:]:
+                reply = reply[:da1]
+                break
             ready, _, _ = select.select([fd], [], [], timeout)
             if not ready:
-                break
+                return None
             reply += os.read(fd, 1024)
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, saved)
@@ -123,7 +132,7 @@ def main():
         return
     if "vg" not in formats:
         print(f"the terminal advertises fmt={','.join(formats)}, without vg")
-        print("fmt=vg is a proposal: build Rio from raphamorim/rio#2095")
+        print("vg is in spec v1.17; Rio supports it from raphamorim/rio#2095")
         return
 
     out = []

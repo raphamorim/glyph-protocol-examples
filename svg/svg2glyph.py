@@ -30,9 +30,9 @@ import xml.etree.ElementTree as ET
 SVG_NS = "{http://www.w3.org/2000/svg}"
 NUMBER = re.compile(r"[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?")
 
-# Limits from the draft spec (Rio PR #2095).
+# Limits from the spec (v1.17, §8.9.5 and §6.1).
 MAX_LAYERS = 128
-MAX_PAYLOAD = 64 * 1024
+MAX_PAYLOAD = 32 * 1024
 
 PAINT_PROPS = (
     "fill", "stroke", "stroke-width", "fill-rule", "opacity", "fill-opacity",

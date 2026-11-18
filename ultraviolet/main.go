@@ -43,7 +43,7 @@ func letterExtent(advance, lineHeight, ymin int) string {
 }
 
 func sendRegisterGlyf(w *uv.Terminal, cp rune, payload string) {
-	fmt.Fprintf(w, "\x1b_25a1;r;cp=%x;reply=0;upm=1000;%s;%s\x1b\\", cp, nerdExtent, payload)
+	fmt.Fprintf(w, "\x1b_25a1;r;cp=%x;fmt=glyf;reply=0;upm=1000;%s;%s\x1b\\", cp, nerdExtent, payload)
 }
 
 func sendRegisterColrv1(w *uv.Terminal, cp rune, extent, payload string) {
@@ -155,6 +155,10 @@ func glyfIcons() string {
 	return strings.Join(parts, "  ")
 }
 
+// probeSupport sends `s` followed by DA1 and reads until the DA1
+// reply. Returns (names, true) when an `s` reply came first, or
+// (nil, false) when it didn't. `timeout` only guards against a
+// terminal that answers neither.
 func probeSupport(timeout time.Duration) ([]string, bool) {
 	fd := os.Stdin.Fd()
 	oldState, err := term.MakeRaw(fd)
@@ -169,7 +173,8 @@ func probeSupport(timeout time.Duration) ([]string, bool) {
 	}
 	defer reader.Close()
 
-	fmt.Fprint(os.Stdout, "\x1b_25a1;s\x1b\\")
+	// `s` then DA1 (spec §3.4): the DA1 reply settles the question.
+	fmt.Fprint(os.Stdout, "\x1b_25a1;s\x1b\\\x1b[c")
 
 	type result struct {
 		fmts []string
@@ -187,15 +192,11 @@ func probeSupport(timeout time.Duration) ([]string, bool) {
 				return
 			}
 			collected = append(collected, buf[:n]...)
-			if bytes.Contains(collected, []byte("\x1b\\")) {
-				if v, ok := parseFmtField(collected); ok {
-					ch <- result{v, true}
-				} else {
-					ch <- result{nil, false}
-				}
+			if v, ok, done := probeAnswer(collected); done {
+				ch <- result{v, ok}
 				return
 			}
-			if len(collected) > 2048 {
+			if len(collected) > 4096 {
 				ch <- result{nil, false}
 				return
 			}
@@ -209,6 +210,20 @@ func probeSupport(timeout time.Duration) ([]string, bool) {
 		reader.Cancel()
 		return nil, false
 	}
+}
+
+// probeAnswer reports whether the DA1 reply (`CSI ? … c`) has
+// arrived, and if so the `fmt` list from an `s` reply before it. No
+// `s` reply before DA1 means the terminal doesn't implement Glyph
+// Protocol. Waiting for DA1 also drains its reply so it doesn't reach
+// the app as input.
+func probeAnswer(data []byte) (fmts []string, ok bool, done bool) {
+	da1 := bytes.Index(data, []byte("\x1b[?"))
+	if da1 < 0 || bytes.IndexByte(data[da1:], 'c') < 0 {
+		return nil, false, false
+	}
+	fmts, ok = parseFmtField(data[:da1])
+	return fmts, ok, true
 }
 
 // parseFmtField locates `fmt=` in an APC reply and splits its
@@ -234,7 +249,7 @@ func parseFmtField(data []byte) ([]string, bool) {
 }
 
 func main() {
-	fmts, ok := probeSupport(200 * time.Millisecond)
+	fmts, ok := probeSupport(2 * time.Second)
 	if !ok {
 		fmt.Fprintln(os.Stderr,
 			"This terminal does not implement Glyph Protocol. Run in Rio or "+

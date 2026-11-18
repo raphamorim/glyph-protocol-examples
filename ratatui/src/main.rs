@@ -115,7 +115,7 @@ fn send_register_glyf(
     // (otherwise the queued ACK bytes spill to the next prompt).
     write!(
         out,
-        "\x1b_25a1;r;cp={:x};reply=0;upm=1000;{};{}\x1b\\",
+        "\x1b_25a1;r;cp={:x};fmt=glyf;reply=0;upm=1000;{};{}\x1b\\",
         cp, NERD_EXTENT, payload
     )
 }
@@ -129,7 +129,7 @@ fn send_register_glyf_wide(
     // printed text keeps the cell after it blank for the overflow.
     write!(
         out,
-        "\x1b_25a1;r;cp={:x};reply=0;upm=1000;{};width=2;{}\x1b\\",
+        "\x1b_25a1;r;cp={:x};fmt=glyf;reply=0;upm=1000;{};width=2;{}\x1b\\",
         cp, NERD_EXTENT, payload
     )
 }
@@ -144,7 +144,7 @@ fn send_register_glyf_placed(
     // sizing/placement parameters, verbatim from PLACEMENT_SLOTS.
     write!(
         out,
-        "\x1b_25a1;r;cp={:x};reply=0;upm=1000;{};{};{}\x1b\\",
+        "\x1b_25a1;r;cp={:x};fmt=glyf;reply=0;upm=1000;{};{};{}\x1b\\",
         cp, PLACEMENT_EXTENT, params, payload
     )
 }
@@ -442,16 +442,21 @@ fn boxed_wide(cp: u32) -> String {
     format!("\x1b[48;2;64;64;64m{} \x1b[0m", char::from_u32(cp).unwrap())
 }
 
-/// Send `s` and wait up to `timeout_ms` for the terminal's reply.
-/// Returns the list of `fmt` names on success, `None` on timeout or
-/// unrecognised reply. Caller owns raw-mode setup / teardown.
+/// Detect support the way the spec says (§3.4): send `s` followed by
+/// DA1. Terminals answer in order and nearly all answer DA1, so once
+/// its reply arrives the question is settled: an `s` reply before it
+/// means Glyph Protocol, none means not. Waiting for DA1 also drains
+/// its reply so it doesn't reach the app as input. `timeout_ms` only
+/// guards against a terminal that answers neither. Returns the list of
+/// `fmt` names, or `None` when unsupported. Caller owns raw-mode setup
+/// / teardown.
 #[cfg(unix)]
 fn probe_support(timeout_ms: i32) -> Option<Vec<String>> {
     use std::io::Read;
     use std::os::unix::io::AsRawFd;
 
     let mut out = io::stdout();
-    out.write_all(b"\x1b_25a1;s\x1b\\").ok()?;
+    out.write_all(b"\x1b_25a1;s\x1b\\\x1b[c").ok()?;
     out.flush().ok()?;
 
     let stdin = io::stdin();
@@ -484,23 +489,29 @@ fn probe_support(timeout_ms: i32) -> Option<Vec<String>> {
             return None;
         }
         collected.extend_from_slice(&buf[..n]);
-        if collected.windows(2).any(|w| w == b"\x1b\\") {
-            break;
+        if let Some(answer) = probe_answer(&collected) {
+            return answer;
         }
-        if collected.len() > 2048 {
-            break;
+        if collected.len() > 4096 {
+            return None;
         }
     }
+}
 
-    parse_fmt_field(&collected)
+/// `Some(answer)` once the DA1 reply (`CSI ? … c`) has arrived: the
+/// `fmt` list from an `s` reply before it, or `None` if there was none.
+fn probe_answer(data: &[u8]) -> Option<Option<Vec<String>>> {
+    let da1 = data.windows(3).position(|w| w == b"\x1b[?")?;
+    data[da1..].iter().position(|&b| b == b'c')?;
+    Some(parse_fmt_field(&data[..da1]))
 }
 
 #[cfg(not(unix))]
 fn probe_support(_timeout_ms: i32) -> Option<Vec<String>> {
-    // No portable non-blocking TTY read on other platforms; assume
-    // `glyf` support optimistically. Unsupported terminals silently
-    // drop the register sequences below, so the demo degrades cleanly.
-    Some(vec!["glyf".to_string()])
+    // No portable non-blocking TTY read on other platforms, so the
+    // probe can't be answered. A client sends nothing else unless `s`
+    // answered (spec §3.4), so treat it as unsupported.
+    None
 }
 
 /// Scan an APC reply for the `fmt=` field and split its comma-separated
@@ -522,12 +533,12 @@ fn parse_fmt_field(data: &[u8]) -> Option<Vec<String>> {
 
 fn main() -> io::Result<()> {
     // Raw mode is needed only for the probe — we need stdin to hand
-    // us the `s` reply byte-by-byte. After the probe we drop back to
-    // cooked mode; the registers below use `silent=1` so the terminal
-    // emits no ACK bytes that would need draining. Three println!s
-    // follow, no alternate screen, no TUI.
+    // us the replies byte-by-byte. After the probe we drop back to
+    // cooked mode; the registers below use `reply=0` or `reply=2` so a
+    // working terminal emits no ACK bytes that would need draining.
+    // Plain println!s follow, no alternate screen, no TUI.
     enable_raw_mode()?;
-    let fmt = probe_support(200);
+    let fmt = probe_support(2000);
     disable_raw_mode()?;
 
     let Some(fmts) = fmt else {

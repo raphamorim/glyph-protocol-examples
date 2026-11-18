@@ -1,11 +1,16 @@
 # glyph-protocol-examples
 
 Small demos that exercise [Glyph Protocol][blog]'s payload formats
-(`glyf`, `colrv0`, `colrv1`, and the proposed `vg`) across Rust, Go,
-TypeScript, and Jam — plus an
-[ultraviolet](./ultraviolet) full-screen TUI variant in Go.
+(`vg`, `glyf`, `colrv0` and `colrv1`) across Rust, Go, TypeScript,
+and Jam — plus an [ultraviolet](./ultraviolet) full-screen TUI
+variant in Go.
 
-Each demo probes the terminal for `fmt` support, then prints:
+Each demo detects support the way the spec says (§3.4): it sends `s`
+followed by DA1 (`CSI c`) and reads until the DA1 reply. An `s` reply
+before it lists the formats the terminal accepts; none means the
+terminal doesn't implement Glyph Protocol, and the demo sends nothing
+else. Every format is optional, so each one is registered only if the
+terminal lists it. Then the demo prints:
 
 - `colrv1 example` (twice, once over a blue background block): the
   string **"Rio Terminal Emulator"** rendered from `fmt=colrv1`
@@ -31,8 +36,8 @@ Each demo probes the terminal for `fmt` support, then prints:
   `width=2;size=contain` combo. Each glyph prints over a grey
   background block so the cell box (and where the §8.5 transform put
   the outline inside it) is visible.
-- `vg …` (four rows; ratatui, bubbletea and ink): the proposed
-  [`fmt=vg`](#svg-icons-gradients-and-emoji-fmtvg-proposal), SVG path
+- `vg …` (four rows; ratatui, bubbletea and ink):
+  [`fmt=vg`](#svg-icons-gradients-and-emoji-fmtvg), SVG path
   data and paint sent as text. Six icons; gradients, clips and a
   butt/miter stroke; then Noto emoji (gradients) and Twemoji emoji, each
   two cells wide. A terminal without `vg` gets
@@ -52,7 +57,6 @@ from the font's metrics instead of the outline's own bounds:
   `aw=1000;lh=1000;ymin=-120`. A cell is taller than it is wide, so
   that's where the size modes visibly differ.
 
-Format support is negotiated per-session via the protocol's `s` verb.
 Missing formats degrade to a labelled fallback line (e.g. `(colrv0
 not advertised by terminal)`) instead of failing the whole demo.
 [Rio][rio] is the reference implementation of the protocol.
@@ -86,14 +90,14 @@ plain-CLI print. If you want to port the protocol to another language,
 the wire helpers at the top of each entry file are the whole story
 (APC sequence construction + base64 payloads).
 
-## SVG icons, gradients and emoji (`fmt=vg`, proposal)
+## SVG icons, gradients and emoji (`fmt=vg`)
 
-[`svg/`](./svg) tries `fmt=vg`, a proposed payload that carries SVG's
-path data and paint model as plain text instead of a base64 font
-outline: layers of fills, strokes and clips, painted with the
-foreground, a fixed colour or a gradient. It isn't an SVG document,
-and it isn't in the spec yet; [raphamorim/rio#2095][path-pr] implements
-it in Rio, with the draft spec in its description.
+[`svg/`](./svg) shows `fmt=vg`, the recommended payload format since
+spec v1.17 (§8.9): SVG's path data and paint model as plain text
+instead of a base64 font outline, in layers of fills, strokes and
+clips, painted with the foreground, a fixed colour or a gradient. It
+isn't an SVG document. [raphamorim/rio#2095][path-pr] adds it to the
+spec and implements it in Rio.
 
 ```bash
 python3 svg/demo.py

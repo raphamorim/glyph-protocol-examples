@@ -125,7 +125,7 @@ function sendRegisterGlyf(cp: number, payload: string): void {
 	// `status=0` ACK — which keeps the shell prompt clean on exit
 	// (otherwise the queued ACK bytes spill to the next prompt).
 	process.stdout.write(
-		`\x1b_25a1;r;cp=${cp.toString(16)};reply=0;upm=1000;${nerdExtent};${payload}\x1b\\`,
+		`\x1b_25a1;r;cp=${cp.toString(16)};fmt=glyf;reply=0;upm=1000;${nerdExtent};${payload}\x1b\\`,
 	);
 }
 
@@ -133,7 +133,7 @@ function sendRegisterGlyfWide(cp: number, payload: string): void {
 	// Same as sendRegisterGlyf but drawn across two cells. The printed
 	// text keeps the cell after it blank for the overflow.
 	process.stdout.write(
-		`\x1b_25a1;r;cp=${cp.toString(16)};reply=0;upm=1000;${nerdExtent};width=2;${payload}\x1b\\`,
+		`\x1b_25a1;r;cp=${cp.toString(16)};fmt=glyf;reply=0;upm=1000;${nerdExtent};width=2;${payload}\x1b\\`,
 	);
 }
 
@@ -145,7 +145,7 @@ function sendRegisterGlyfPlaced(
 	// Same as sendRegisterGlyf plus the registration's §8.5
 	// sizing/placement parameters, verbatim from placementSlots.
 	process.stdout.write(
-		`\x1b_25a1;r;cp=${cp.toString(16)};reply=0;upm=1000;${placementExtent};${params};${payload}\x1b\\`,
+		`\x1b_25a1;r;cp=${cp.toString(16)};fmt=glyf;reply=0;upm=1000;${placementExtent};${params};${payload}\x1b\\`,
 	);
 }
 
@@ -302,9 +302,11 @@ function boxedWide(cp: number): string {
 	return `\x1b[48;2;64;64;64m${String.fromCodePoint(cp)} \x1b[0m`;
 }
 
-// probeSupport sends `s` and waits up to `timeoutMs` for the terminal's
-// reply. Resolves to the list of `fmt` names on success, or `undefined`
-// on timeout / malformed reply.
+// probeSupport sends `s` followed by DA1 (spec §3.4) and reads until
+// the DA1 reply: an `s` reply before it resolves to its list of `fmt`
+// names, none resolves to `undefined`. Waiting for DA1 also drains its
+// reply so it doesn't reach the app as input. `timeoutMs` only guards
+// against a terminal that answers neither.
 async function probeSupport(timeoutMs: number): Promise<string[] | undefined> {
 	if (!process.stdin.isTTY) return undefined;
 
@@ -313,7 +315,7 @@ async function probeSupport(timeoutMs: number): Promise<string[] | undefined> {
 	process.stdin.setRawMode(true);
 	process.stdin.resume();
 
-	process.stdout.write(`\x1b_25a1;s\x1b\\`);
+	process.stdout.write(`\x1b_25a1;s\x1b\\\x1b[c`);
 
 	return new Promise<string[] | undefined>(resolve => {
 		let collected = Buffer.alloc(0);
@@ -334,8 +336,11 @@ async function probeSupport(timeoutMs: number): Promise<string[] | undefined> {
 
 		const onData = (chunk: Buffer) => {
 			collected = Buffer.concat([collected, chunk]);
-			if (collected.includes('\x1b\\') || collected.length > 2048) {
-				settle(parseFmtField(collected));
+			const da1 = collected.indexOf('\x1b[?');
+			if (da1 >= 0 && collected.indexOf('c', da1) >= 0) {
+				settle(parseFmtField(collected.subarray(0, da1)));
+			} else if (collected.length > 4096) {
+				settle(undefined);
 			}
 		};
 		const timer = setTimeout(() => settle(undefined), timeoutMs);
@@ -359,7 +364,7 @@ function parseFmtField(data: Buffer): string[] | undefined {
 	return value === '' ? [] : value.split(',');
 }
 
-const fmts = await probeSupport(200);
+const fmts = await probeSupport(2000);
 if (fmts === undefined) {
 	process.stderr.write(
 		'This terminal does not implement Glyph Protocol. Run in Rio or ' +
