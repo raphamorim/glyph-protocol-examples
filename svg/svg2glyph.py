@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Turn an icon SVG into a Glyph Protocol `fmt=path` registration.
+"""Turn an icon SVG into a Glyph Protocol `fmt=vg` registration.
 
     python3 svg2glyph.py icon.svg                 print the registration
     python3 svg2glyph.py icon.svg --cp 100005     ...at another codepoint
@@ -7,13 +7,17 @@
 
 Covers what icon sets ship: <path>, <circle>, <ellipse>, <rect>, <line>,
 <polyline> and <polygon> inside <g>s; fill (nonzero or evenodd) and
-stroke; `currentColor` (or no colour at all) as the cell's foreground;
-`opacity`, `fill-opacity` and `stroke-opacity` as alpha; inline
-`style="..."` declarations for those same properties.
+stroke, with its caps, joins and miter limit; `currentColor` (or no
+colour at all) as the cell's foreground; `opacity`, `fill-opacity` and
+`stroke-opacity` as alpha; inline `style="..."` declarations for those
+same properties.
 
 Anything outside that is refused with a message rather than drawn
-wrong: transforms, <use>, clipping, masks, gradients, and strokes with
-butt or square caps or miter joins (the format's strokes are round).
+wrong: transforms, <use>, clipping, masks, gradients and dashes.
+`fmt=vg` itself has gradients and clips, but getting them out of an
+arbitrary SVG means resolving CSS, transforms and gradient units, which
+is a job for a full SVG library (usvg, for one) rather than this
+script. Emoji sets need that; icon sets don't.
 
 Standard library only.
 """
@@ -27,13 +31,13 @@ SVG_NS = "{http://www.w3.org/2000/svg}"
 NUMBER = re.compile(r"[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?")
 
 # Limits from the draft spec (Rio PR #2095).
-MAX_LAYERS = 16
+MAX_LAYERS = 128
 MAX_PAYLOAD = 64 * 1024
 
 PAINT_PROPS = (
     "fill", "stroke", "stroke-width", "fill-rule", "opacity", "fill-opacity",
-    "stroke-opacity", "stroke-linecap", "stroke-linejoin", "display",
-    "visibility",
+    "stroke-opacity", "stroke-linecap", "stroke-linejoin",
+    "stroke-miterlimit", "stroke-dasharray", "display", "visibility",
 )
 NAMED = {"black": "000000", "white": "ffffff", "red": "ff0000",
          "green": "008000", "blue": "0000ff"}
@@ -125,7 +129,7 @@ def colour(value, alpha):
     if value == "currentColor":
         return "fg" if alpha >= 1 else f"fg@{num(alpha)}"
     if value.startswith("url("):
-        raise Unsupported(f"paint {value}: gradients and patterns")
+        raise Unsupported(f"paint {value}: gradients and patterns need a full SVG library")
     hex_ = NAMED.get(value.lower())
     if hex_ is None:
         if not re.fullmatch(r"#[0-9a-fA-F]{3}|#[0-9a-fA-F]{6}", value):
@@ -134,6 +138,24 @@ def colour(value, alpha):
         if len(hex_) == 3:
             hex_ = "".join(c * 2 for c in hex_)
     return f"#{hex_.lower()}{round(alpha * 255):02x}"
+
+
+def stroke_paint(width, style):
+    """`stroke=<w>[/<cap>[/<join>]]`. SVG's defaults are butt caps and
+    miter joins with a limit of 4; the format's are round and round."""
+    cap = style.get("stroke-linecap", "butt")
+    join = style.get("stroke-linejoin", "miter")
+    if cap not in ("butt", "round", "square"):
+        raise Unsupported(f"stroke-linecap={cap}")
+    if join in ("miter", "miter-clip", "arcs"):
+        limit = float(style.get("stroke-miterlimit", 4))
+        join = "miter" if limit == 4 else f"miter{num(max(limit, 1))}"
+    elif join not in ("round", "bevel"):
+        raise Unsupported(f"stroke-linejoin={join}")
+    paint = f"stroke={num(width)}"
+    if cap == "round" and join == "round":
+        return paint
+    return f"{paint}/{cap}" + ("" if join == "round" else f"/{join}")
 
 
 def own_style(el):
@@ -183,14 +205,11 @@ def convert(path):
                 layers.append((f"fill={rule}", colour(fill, a), d))
             stroke = style.get("stroke", "none")
             if stroke != "none":
-                cap = style.get("stroke-linecap", "butt")
-                join = style.get("stroke-linejoin", "miter")
-                if cap != "round" or join != "round":
-                    raise Unsupported(
-                        f"stroke-linecap={cap} stroke-linejoin={join}: strokes are round")
+                if style.get("stroke-dasharray", "none") not in ("none", ""):
+                    raise Unsupported("stroke-dasharray: dashes")
                 width = float(style.get("stroke-width", 1))
                 a = alpha * float(style.get("stroke-opacity", 1))
-                layers.append((f"stroke={num(width)}", colour(stroke, a), d))
+                layers.append((stroke_paint(width, style), colour(stroke, a), d))
         for child in el:
             walk(child, style, alpha)
 
@@ -221,7 +240,7 @@ def convert(path):
 
 def registration(cp, vb, payload, extra=""):
     extra = f";{extra}" if extra else ""
-    return f"\x1b_25a1;r;cp={cp:x};fmt=path;vb={vb};reply=0{extra};{payload}\x1b\\"
+    return f"\x1b_25a1;r;cp={cp:x};fmt=vg;vb={vb};reply=0{extra};{payload}\x1b\\"
 
 
 def main():

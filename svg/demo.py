@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Glyph Protocol `fmt=path` demo: SVG icons drawn by the terminal.
+"""Glyph Protocol `fmt=vg` demo: SVG icons drawn by the terminal.
 
     python3 svg/demo.py
 
-Probes the terminal with `s`, and if it lists `path` in `fmt`,
-registers icons from seven icon sets plus a few two-colour glyphs and
-prints them. Standard library only; needs a Unix tty.
+Probes the terminal with `s`, and if it lists `vg` in `fmt`, registers
+icons from seven icon sets plus glyphs drawn for the demo (fixed
+colours, gradients, clips, stroke styles) and prints them. Standard
+library only; needs a Unix tty.
 """
 
 import os
@@ -54,6 +55,31 @@ TWO_COLOUR = [
     "|stroke=2,#1f2328ff:M12 9v5M12 17.5v.01",
 ]
 
+CIRCLE = "M2 12a10 10 0 1 0 20 0a10 10 0 1 0-20 0Z"
+GRADIENTS = [
+    # A sun: radial gradient with its focal point up and to the left.
+    "fill=nonzero,rad(9 9 0 12 12 11 / 0 #fff6a8 / 0.55 #ffb000 / 1 #ff5a00):" + CIRCLE,
+    # A folder that fades out: a gradient of the foreground alone, so it
+    # stays an alpha mask and follows the text colour.
+    f"fill=nonzero,lin(0 3 0 21 / 0 fg / 1 fg@0.15):{FOLDER}",
+    # Linear gradient on a stroke.
+    "stroke=3/round/round,lin(2 12 22 12 / 0 #3b82f6 / 1 #e5534b):M3 17l5-10 4 8 4-8 5 10",
+]
+CLIPS = [
+    # A striped ball: the stripes are clipped to the circle.
+    "fill=nonzero,#f4c430:" + CIRCLE
+    + "|clip=1,nonzero:" + CIRCLE
+    + "|fill=nonzero,#e5534b:M0 4h24v4H0ZM0 12h24v4H0ZM0 20h24v4H0Z",
+    # Half a sun: the gradient clipped to the left half.
+    "clip=1,nonzero:M0 0h12v24H0Z|fill=nonzero,rad(12 12 0 12 12 10 / 0 #fff6a8 / 1 #ff5a00):" + CIRCLE,
+]
+ZIGZAG = "M3 18l4.5-9 4.5 9 4.5-9 4.5 9"
+STROKES = [
+    f"stroke=3,fg:{ZIGZAG}",                 # round caps, round joins
+    f"stroke=3/butt/miter,fg:{ZIGZAG}",      # SVG's defaults
+    f"stroke=3/square/bevel,fg:{ZIGZAG}",
+]
+
 FG_COLOURS = [31, 32, 33, 34, 35, 36]
 SIZES = ["height", "contain", "cover", "stretch"]
 GREY_BG = "\x1b[48;5;240m"
@@ -90,9 +116,9 @@ def main():
     if formats is None:
         print("no Glyph Protocol reply: run this in Rio")
         return
-    if "path" not in formats:
-        print(f"the terminal advertises fmt={','.join(formats)}, without path")
-        print("fmt=path is a proposal: build Rio from raphamorim/rio#2095")
+    if "vg" not in formats:
+        print(f"the terminal advertises fmt={','.join(formats)}, without vg")
+        print("fmt=vg is a proposal: build Rio from raphamorim/rio#2095")
         return
 
     out = []
@@ -109,8 +135,12 @@ def main():
         glyphs = [register(*convert(os.path.join(ICONS, f))) for f in files]
         lines.append(f"{label:<12}" + " ".join(glyphs))
 
-    glyphs = [register("0,0,24,24", p) for p in TWO_COLOUR]
-    lines.append(f"{'two colour':<12}" + " ".join(glyphs))
+    for label, payloads in (("two colour", TWO_COLOUR), ("gradients", GRADIENTS),
+                            ("clips", CLIPS)):
+        glyphs = [register("0,0,24,24", p) for p in payloads]
+        lines.append(f"{label:<12}" + " ".join(glyphs))
+    glyphs = [register("0,0,24,24", p) for p in STROKES]
+    lines.append(f"{'strokes':<12}" + " ".join(glyphs) + "   round, butt/miter, square/bevel")
 
     folder = register(*convert(os.path.join(ICONS, "lucide/folder.svg")))
     lines.append(f"{'follows fg':<12}"
@@ -129,7 +159,7 @@ def main():
                  + "   " + " ".join(SIZES))
 
     sys.stdout.write("".join(out))
-    print(f"fmt=path demo (terminal advertises fmt={','.join(formats)})\n")
+    print(f"fmt=vg demo (terminal advertises fmt={','.join(formats)})\n")
     for line in lines:
         print(line)
     print()

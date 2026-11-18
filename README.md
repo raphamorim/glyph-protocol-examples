@@ -78,18 +78,20 @@ plain-CLI print. If you want to port the protocol to another language,
 the wire helpers at the top of each entry file are the whole story
 (APC sequence construction + base64 payloads).
 
-## SVG icons (`fmt=path`, proposal)
+## SVG icons and gradients (`fmt=vg`, proposal)
 
-[`svg/`](./svg) tries `fmt=path`, a proposed payload that carries SVG
-path data as plain text instead of a base64 font outline. It isn't in
-the spec yet; [raphamorim/rio#2095][path-pr] implements it in Rio, with
-the draft spec in its description.
+[`svg/`](./svg) tries `fmt=vg`, a proposed payload that carries SVG's
+path data and paint model as plain text instead of a base64 font
+outline: layers of fills, strokes and clips, painted with the
+foreground, a fixed colour or a gradient. It isn't an SVG document,
+and it isn't in the spec yet; [raphamorim/rio#2095][path-pr] implements
+it in Rio, with the draft spec in its description.
 
 ```bash
 python3 svg/demo.py
 ```
 
-It asks the terminal for `fmt` support and, when `path` is listed,
+It asks the terminal for `fmt` support and, when `vg` is listed,
 registers icons from seven sets and prints:
 
 - `stroked`: Lucide and Tabler line icons (round strokes, 2 units wide).
@@ -98,11 +100,17 @@ registers icons from seven sets and prints:
 - `duotone`: Phosphor duotone, a 20% foreground layer under the icon.
 - `two colour`: three glyphs drawn for the demo that mix fixed colours
   with the foreground.
+- `gradients`: a radial gradient with a focal point, a folder that fades
+  out (a gradient of the foreground alone, so it still follows the text
+  colour), and a gradient on a stroke.
+- `clips`: stripes clipped to a circle, and half of a radial gradient.
+- `strokes`: the same zigzag with round caps and joins, butt and miter,
+  and square and bevel.
 - `follows fg`: one registration printed in six SGR colours.
 - `width=2` and `size=`: the §8.5 keys, which place the viewBox the way
   they place a `glyf` extent.
 
-Without `path` it prints which formats the terminal has and stops.
+Without `vg` it prints which formats the terminal has and stops.
 
 [`svg/svg2glyph.py`](svg/svg2glyph.py) is the converter the demo uses,
 standard library only. It turns an icon SVG into a registration:
@@ -114,10 +122,14 @@ python3 svg/svg2glyph.py svg/icons/lucide/folder.svg --payload    # vb and paylo
 ```
 
 It handles what icon sets ship: paths and basic shapes inside groups,
-fills and round strokes, `currentColor` as the foreground, opacity as
-alpha. It refuses what the format can't carry (transforms, `<use>`,
-clipping, masks, gradients, butt or square caps, miter joins) with a
-message instead of drawing something different.
+fills and strokes with their caps and joins, `currentColor` as the
+foreground, opacity as alpha. It refuses transforms, `<use>`, clipping,
+masks, gradients and dashes with a message instead of drawing something
+different. The format has gradients and clips, but getting them out of
+an arbitrary SVG means resolving CSS, transforms and gradient units,
+which needs a full SVG library (usvg, for one); emoji sets need that,
+icon sets don't. The gradients and clips in the demo are written by
+hand.
 
 The icons in [`svg/icons`](svg/icons) are unmodified copies from each
 set, with its licence next to them: Lucide (ISC), Heroicons, Octicons,
