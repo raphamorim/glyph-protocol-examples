@@ -120,8 +120,9 @@ support and, when `vg` is listed, prints:
   set. Noto's use gradients; OpenMoji's outlines are butt and miter
   strokes.
 - `follows fg`: one registration printed in six SGR colours.
-- `width=2` and `size=`: the §8.5 keys, which place the viewBox the way
-  they place a `glyf` extent.
+- `width=2` and `fit=`: `vg` places the viewBox like SVG's
+  `preserveAspectRatio`, with `fit` (`contain`/`cover`/`stretch`) and
+  `align` (`start`/`center`/`end` on each axis, no baseline).
 
 Without `vg` it prints which formats the terminal has and stops.
 

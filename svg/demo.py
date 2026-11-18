@@ -86,7 +86,7 @@ STROKES = [
 ]
 
 FG_COLOURS = [31, 32, 33, 34, 35, 36]
-SIZES = ["height", "contain", "cover", "stretch"]
+FITS = ["contain", "cover", "stretch"]
 GREY_BG = "\x1b[48;5;240m"
 RESET = "\x1b[0m"
 
@@ -168,10 +168,11 @@ def main():
     lines.append(f"{'width=2':<12}" + "  ".join(wide))
 
     heart_vb, heart = convert(os.path.join(ICONS, "heroicons/heart.svg"))
-    sized = [register(heart_vb, heart, f"size={s}") for s in SIZES]
-    lines.append(f"{'size=':<12}"
-                 + " ".join(f"{GREY_BG}{g}{RESET}" for g in sized)
-                 + "   " + " ".join(SIZES))
+    # vg places the viewBox like SVG's preserveAspectRatio: fit and align.
+    fitted = [register(heart_vb, heart, f"fit={f}") for f in FITS]
+    lines.append(f"{'fit=':<12}"
+                 + " ".join(f"{GREY_BG}{g}{RESET}" for g in fitted)
+                 + "   " + " ".join(FITS))
 
     sys.stdout.write("".join(out))
     print(f"fmt=vg demo (terminal advertises fmt={','.join(formats)})\n")
